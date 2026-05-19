@@ -8,13 +8,13 @@ class LegacyScraper(BaseScraper):
 
     async def login(self, page: Page) -> bool:
         await page.goto(self.url)
-        await page.wait_for_load_state("networkidle")
+        await page.wait_for_load_state("load")
 
         await page.fill('input[name="account"]', self.extra.get("account", ""))
         await page.fill('input[name="username"]', self.username)
         await page.fill('input[name="j_password"]', self.password)
         await page.click('input[id="login-btn"]')
-        await page.wait_for_load_state("networkidle")
+        await page.wait_for_function("() => !window.location.href.includes('login')", timeout=60000)
 
         return "login" not in page.url.lower()
 

@@ -7,12 +7,12 @@ class GeniusTracksScraper(BaseScraper):
 
     async def login(self, page: Page) -> bool:
         await page.goto(self.url)
-        await page.wait_for_load_state("networkidle")
+        await page.wait_for_load_state("load")
 
         await page.fill('input[name="username"], input[type="email"]', self.username)
         await page.fill('input[name="password"], input[type="password"]', self.password)
         await page.click('button[type="submit"], input[type="submit"]')
-        await page.wait_for_load_state("networkidle")
+        await page.wait_for_function("() => !window.location.href.includes('login')", timeout=60000)
 
         return "login" not in page.url.lower()
 

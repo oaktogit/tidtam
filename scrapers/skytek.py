@@ -14,14 +14,14 @@ class SkytekScraper(BaseScraper):
 
     async def login(self, page: Page) -> bool:
         await page.goto(self.url)
-        await page.wait_for_load_state("networkidle")
+        await page.wait_for_load_state("load")
 
         await page.click('input[name="rbl"][value="เลขทะเบียน"]')
         await page.fill('input[name="tbUserName"]', self.username)
         if self.password:
             await page.fill('input[name="tbPwd"]', self.password)
         await page.click('input[id="btnLogin"]')
-        await page.wait_for_load_state("networkidle")
+        await page.wait_for_url("**vehiclemonitor.aspx", timeout=60000)
 
         return page.url.lower().endswith("vehiclemonitor.aspx")
 
