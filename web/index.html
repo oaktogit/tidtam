@@ -202,9 +202,20 @@
     }
     .rbtn:disabled { opacity: .85; cursor: wait; }
 
-    /* refresh button: idle = ↻ glyph, busy = 3 floating dust dots (rect stays put) */
-    #refresh-btn { min-width: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 3px; }
-    #refresh-btn .r-busy { display: none; align-items: center; gap: 3px; height: 1em; }
+    /* refresh button: idle = ↻ glyph, busy = 3 floating dust dots.
+       both stages share the same absolutely-positioned box so neither can
+       shift layout or visually overlap the other. */
+    #refresh-btn {
+      position: relative;
+      min-width: 40px; height: 24px;
+      padding: 0 10px;
+    }
+    #refresh-btn .r-idle, #refresh-btn .r-busy {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      line-height: 1;
+    }
+    #refresh-btn .r-busy { display: none; gap: 4px; }
     #refresh-btn .r-busy .dot {
       width: 4px; height: 4px; border-radius: 50%; background: var(--teal);
       animation: dustFloat .9s ease-in-out infinite;
@@ -212,7 +223,7 @@
     #refresh-btn .r-busy .dot:nth-child(2){ animation-delay: .15s; background: var(--teal-md); }
     #refresh-btn .r-busy .dot:nth-child(3){ animation-delay: .30s; background: var(--teal-bd); }
     #refresh-btn.busy .r-idle { display: none; }
-    #refresh-btn.busy .r-busy { display: inline-flex; }
+    #refresh-btn.busy .r-busy { display: flex; }
 
     #vlist {
       padding: 8px;
