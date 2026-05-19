@@ -7,8 +7,7 @@ class LegacyScraper(BaseScraper):
     source_name = "legacy"
 
     async def login(self, page: Page) -> bool:
-        await page.goto(self.url)
-        await page.wait_for_load_state("load")
+        await page.goto(self.url, timeout=90000, wait_until="domcontentloaded")
 
         await page.fill('input[name="account"]', self.extra.get("account", ""))
         await page.fill('input[name="username"]', self.username)
