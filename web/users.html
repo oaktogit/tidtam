@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>จัดการผู้ใช้ — Tidtam</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@400;600;700&family=Share+Tech+Mono&display=swap');
+    :root {
+      --teal: #0D9488; --teal-md: #14B8A6; --teal-lt: #CCFBF1; --teal-bd: #99F6E4;
+      --salmon: #F43F5E; --amber: #F59E0B; --green: #22C55E; --gray: #9CA3AF;
+      --bg: #F0FDFA; --surface: #FFFFFF; --border: #E2E8F0;
+      --text: #134E4A; --dim: #64748B;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Kanit', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    header {
+      background: var(--surface); border-bottom: 2px solid var(--teal-bd);
+      box-shadow: 0 2px 10px rgba(13,148,136,.10);
+      display: flex; align-items: center; gap: 12px; padding: 12px 18px;
+      position: sticky; top: 0; z-index: 100;
+    }
+    .logo { font-size: 1.05rem; font-weight: 700; color: var(--teal); }
+    .logo em { color: var(--salmon); font-style: normal; }
+    .ttl { font-size: .95rem; color: var(--dim); margin-left: 4px; }
+    .spacer { flex: 1; }
+    .btn {
+      padding: 7px 13px; font-size: .82rem; font-family: inherit; font-weight: 600;
+      border: 1.5px solid var(--teal-bd); border-radius: 8px;
+      background: var(--teal-lt); color: var(--teal); cursor: pointer;
+      text-decoration: none; display: inline-flex; align-items: center; gap: 5px;
+    }
+    .btn:hover { background: var(--teal); color: #fff; }
+    .btn.red { border-color: #FCA5A5; background: #FEF2F2; color: #B91C1C; }
+    .btn.red:hover { background: #B91C1C; color: #fff; }
+    .btn.primary { background: var(--teal); color: #fff; border-color: var(--teal); }
+    .btn.primary:hover { background: #0F766E; }
+
+    main { max-width: 980px; margin: 24px auto; padding: 0 18px; }
+    .toolbar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+    .search {
+      flex: 1; min-width: 200px;
+      padding: 8px 12px; font-family: inherit; font-size: .9rem;
+      border: 1.5px solid var(--border); border-radius: 9px; background: var(--surface);
+      outline: none;
+    }
+    .search:focus { border-color: var(--teal-md); }
+
+    table { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--surface);
+      border: 1.5px solid var(--border); border-radius: 12px; overflow: hidden;
+      box-shadow: 0 2px 12px rgba(13,148,136,.06); }
+    th, td { text-align: left; padding: 11px 14px; font-size: .85rem; border-bottom: 1px solid var(--border); }
+    th { background: var(--teal-lt); color: var(--teal); font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .5px; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: var(--bg); }
+    td.email { font-family: 'Share Tech Mono', monospace; font-size: .8rem; }
+    td.date  { color: var(--dim); font-size: .75rem; white-space: nowrap; }
+
+    .role-pill {
+      display: inline-block; padding: 3px 10px; border-radius: 99px;
+      font-size: .7rem; font-weight: 700; border: 1.5px solid;
+    }
+    .role-pill.admin { background: #FEF3C7; color: #92400E; border-color: #FCD34D; }
+    .role-pill.user  { background: var(--teal-lt); color: var(--teal); border-color: var(--teal-bd); }
+
+    select.role-sel {
+      padding: 4px 8px; font-family: inherit; font-size: .8rem;
+      border: 1.5px solid var(--border); border-radius: 6px; background: var(--surface);
+      color: var(--text); cursor: pointer;
+    }
+
+    .actions { display: flex; gap: 6px; }
+    .icon-btn {
+      padding: 4px 8px; font-size: .75rem; font-family: inherit;
+      border: 1.5px solid var(--border); border-radius: 6px;
+      background: var(--surface); color: var(--text); cursor: pointer;
+    }
+    .icon-btn:hover { background: var(--bg); }
+    .icon-btn.red { color: #B91C1C; border-color: #FCA5A5; background: #FEF2F2; }
+    .icon-btn.red:hover { background: #FCA5A5; color: #fff; }
+
+    .empty, .loading { text-align: center; padding: 36px; color: var(--dim); font-size: .9rem; }
+
+    .you { font-size: .65rem; background: var(--teal); color: #fff; padding: 1px 6px; border-radius: 99px; margin-left: 6px; }
+
+    /* Modal */
+    .modal-bg {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45);
+      z-index: 1000; align-items: center; justify-content: center; padding: 20px;
+    }
+    .modal-bg.show { display: flex; }
+    .modal {
+      background: var(--surface); border-radius: 14px; padding: 24px;
+      width: 100%; max-width: 380px; box-shadow: 0 20px 60px rgba(0,0,0,.2);
+    }
+    .modal h3 { font-size: 1.05rem; margin-bottom: 14px; color: var(--teal); }
+    .modal label { display: block; font-size: .8rem; color: var(--dim); margin-top: 12px; margin-bottom: 5px; }
+    .modal input {
+      width: 100%; padding: 9px 11px; font-size: .9rem; font-family: inherit;
+      border: 1.5px solid var(--border); border-radius: 8px; background: var(--bg); outline: none;
+    }
+    .modal input:focus { border-color: var(--teal-md); background: var(--surface); }
+    .modal-actions { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end; }
+    .err {
+      margin-top: 12px; padding: 8px 11px; background: #FEF2F2; border: 1.5px solid #FCA5A5;
+      color: #B91C1C; border-radius: 7px; font-size: .8rem; display: none;
+    }
+    .err.show { display: block; }
+
+    @media (max-width: 560px) {
+      th.hide-sm, td.hide-sm { display: none; }
+      main { padding: 0 10px; }
+      table { font-size: .8rem; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <a href="index.html" class="logo" style="text-decoration:none">🛰 Tid<em>tam</em></a>
+  <span class="ttl">› จัดการผู้ใช้</span>
+  <div class="spacer"></div>
+  <a href="index.html" class="btn">← Dashboard</a>
+  <button class="btn red" onclick="tidtamAuth.logout()">⎋ ออก</button>
+</header>
+
+<main>
+  <div class="toolbar">
+    <input class="search" id="q" placeholder="ค้นหา email หรือชื่อ..."/>
+    <button class="btn primary" onclick="openAdd()">+ เพิ่มผู้ใช้</button>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Email</th>
+        <th class="hide-sm">ชื่อ</th>
+        <th>Role</th>
+        <th class="hide-sm">สร้างเมื่อ</th>
+        <th style="text-align:right">การกระทำ</th>
+      </tr>
+    </thead>
+    <tbody id="tbody">
+      <tr><td colspan="5" class="loading">กำลังโหลด...</td></tr>
+    </tbody>
+  </table>
+</main>
+
+<!-- Add User Modal -->
+<div class="modal-bg" id="modal">
+  <div class="modal">
+    <h3>เพิ่มผู้ใช้ใหม่</h3>
+    <form id="add-form">
+      <label>อีเมล</label>
+      <input id="add-email" type="email" required autocomplete="off"/>
+      <label>รหัสผ่าน (อย่างน้อย 6 ตัว)</label>
+      <input id="add-pwd" type="password" minlength="6" required autocomplete="new-password"/>
+      <label>ชื่อ (optional)</label>
+      <input id="add-name" type="text"/>
+      <label>Role</label>
+      <select id="add-role" class="role-sel" style="width:100%;padding:9px 11px">
+        <option value="user">user</option>
+        <option value="admin">admin</option>
+      </select>
+      <div class="err" id="add-err"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn" onclick="closeAdd()">ยกเลิก</button>
+        <button type="submit" class="btn primary" id="add-btn">สร้าง</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./config.js"></script>
+<script src="./auth.js"></script>
+<script>
+let me = null;
+let users = [];
+
+async function init() {
+  const r = await tidtamAuth.requireAdmin();
+  if (!r) return;
+  me = r.profile;
+  await loadUsers();
+}
+
+async function loadUsers() {
+  const { data, error } = await sb.from('profiles')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) { tbody.innerHTML = `<tr><td colspan="5" class="empty">Error: ${error.message}</td></tr>`; return; }
+  users = data || [];
+  render();
+}
+
+const tbody = document.getElementById('tbody');
+const q = document.getElementById('q');
+q.oninput = render;
+
+function render() {
+  const term = q.value.trim().toLowerCase();
+  const list = term
+    ? users.filter(u => (u.email||'').toLowerCase().includes(term) || (u.full_name||'').toLowerCase().includes(term))
+    : users;
+
+  if (!list.length) { tbody.innerHTML = `<tr><td colspan="5" class="empty">ไม่พบผู้ใช้</td></tr>`; return; }
+
+  tbody.innerHTML = list.map(u => {
+    const isMe = u.id === me.id;
+    const d = u.created_at ? new Date(u.created_at).toLocaleDateString('th-TH', {year:'numeric',month:'short',day:'numeric'}) : '';
+    return `<tr>
+      <td class="email">${u.email||'—'}${isMe?'<span class="you">คุณ</span>':''}</td>
+      <td class="hide-sm">${u.full_name||'—'}</td>
+      <td>
+        <select class="role-sel" onchange="changeRole('${u.id}', this.value)" ${isMe?'disabled':''}>
+          <option value="user"  ${u.role==='user'?'selected':''}>user</option>
+          <option value="admin" ${u.role==='admin'?'selected':''}>admin</option>
+        </select>
+      </td>
+      <td class="date hide-sm">${d}</td>
+      <td style="text-align:right">
+        <div class="actions" style="justify-content:flex-end">
+          <button class="icon-btn red" onclick="deleteUser('${u.id}', '${u.email||''}')" ${isMe?'disabled style="opacity:.4;cursor:not-allowed"':''}>🗑</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function changeRole(id, role) {
+  const { error } = await sb.from('profiles').update({ role, updated_at: new Date().toISOString() }).eq('id', id);
+  if (error) { alert('Error: ' + error.message); loadUsers(); return; }
+  const u = users.find(x => x.id === id); if (u) u.role = role;
+}
+
+async function deleteUser(id, email) {
+  if (!confirm(`ลบ profile ของ ${email}?\n\n(ไม่ได้ลบ auth user เต็มๆ — ต้องลบที่ Supabase Dashboard)`)) return;
+  const { error } = await sb.from('profiles').delete().eq('id', id);
+  if (error) { alert('Error: ' + error.message); return; }
+  await loadUsers();
+}
+
+/* ─── ADD USER ─── */
+const modal   = document.getElementById('modal');
+const addForm = document.getElementById('add-form');
+const addErr  = document.getElementById('add-err');
+const addBtn  = document.getElementById('add-btn');
+
+function openAdd()  { addForm.reset(); addErr.classList.remove('show'); modal.classList.add('show'); }
+function closeAdd() { modal.classList.remove('show'); }
+modal.onclick = (e) => { if (e.target === modal) closeAdd(); };
+
+addForm.onsubmit = async (e) => {
+  e.preventDefault();
+  addErr.classList.remove('show');
+  addBtn.disabled = true; addBtn.textContent = 'กำลังสร้าง...';
+
+  const email = document.getElementById('add-email').value.trim();
+  const pwd   = document.getElementById('add-pwd').value;
+  const name  = document.getElementById('add-name').value.trim();
+  const role  = document.getElementById('add-role').value;
+
+  // signUp ผ่าน anon key — สร้าง auth user + profile (trigger)
+  const { data, error } = await sb.auth.signUp({ email, password: pwd });
+  if (error) {
+    addErr.textContent = error.message;
+    addErr.classList.add('show');
+    addBtn.disabled = false; addBtn.textContent = 'สร้าง';
+    return;
+  }
+
+  // อัพเดท full_name + role (profile ถูกสร้างโดย trigger แล้ว)
+  if (data.user) {
+    await sb.from('profiles').update({ full_name: name || null, role })
+      .eq('id', data.user.id);
+  }
+
+  closeAdd();
+  await loadUsers();
+  addBtn.disabled = false; addBtn.textContent = 'สร้าง';
+  alert(`สร้าง ${email} เรียบร้อย\n\n⚠️ ผู้ใช้ใหม่อาจต้องยืนยัน email ก่อนเข้าระบบ (ตั้งค่า Supabase → Authentication → Email confirmations)`);
+};
+
+init();
+</script>
+
+</body>
+</html>

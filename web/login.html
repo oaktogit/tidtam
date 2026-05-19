@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>เข้าสู่ระบบ — Tidtam</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@400;600;700&family=Share+Tech+Mono&display=swap');
+    :root {
+      --teal: #0D9488; --teal-md: #14B8A6; --teal-lt: #CCFBF1; --teal-bd: #99F6E4;
+      --salmon: #F43F5E; --bg: #F0FDFA; --surface: #FFFFFF; --border: #E2E8F0;
+      --text: #134E4A; --dim: #64748B;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh; display: grid; place-items: center;
+      font-family: 'Kanit', sans-serif; background: var(--bg); color: var(--text);
+      padding: 20px;
+    }
+    .card {
+      background: var(--surface); border: 1.5px solid var(--teal-bd);
+      border-radius: 16px; padding: 32px 28px; width: 100%; max-width: 380px;
+      box-shadow: 0 10px 40px rgba(13,148,136,.12);
+    }
+    .logo { text-align: center; font-size: 1.6rem; font-weight: 700; color: var(--teal); margin-bottom: 4px; }
+    .logo em { color: var(--salmon); font-style: normal; }
+    .sub { text-align: center; color: var(--dim); font-size: .85rem; margin-bottom: 24px; }
+    label { display: block; font-size: .8rem; color: var(--dim); margin-bottom: 6px; margin-top: 14px; }
+    input {
+      width: 100%; padding: 10px 12px; font-size: .95rem; font-family: inherit;
+      border: 1.5px solid var(--border); border-radius: 9px; background: var(--bg);
+      color: var(--text); outline: none; transition: border-color .15s;
+    }
+    input:focus { border-color: var(--teal-md); background: var(--surface); }
+    button {
+      width: 100%; margin-top: 22px; padding: 11px; font-size: .95rem; font-weight: 600;
+      font-family: inherit; background: var(--teal); color: #fff; border: none;
+      border-radius: 9px; cursor: pointer; transition: background .15s;
+    }
+    button:hover { background: #0F766E; }
+    button:disabled { opacity: .6; cursor: wait; }
+    .err {
+      margin-top: 14px; padding: 9px 12px; background: #FEF2F2; border: 1.5px solid #FCA5A5;
+      color: #B91C1C; border-radius: 8px; font-size: .82rem; display: none;
+    }
+    .err.show { display: block; }
+  </style>
+</head>
+<body>
+
+<form class="card" id="form">
+  <div class="logo">🛰 Tid<em>tam</em></div>
+  <div class="sub">เข้าสู่ระบบเพื่อใช้งาน</div>
+
+  <label for="email">อีเมล</label>
+  <input id="email" type="email" required autocomplete="email" autofocus/>
+
+  <label for="pwd">รหัสผ่าน</label>
+  <input id="pwd" type="password" required autocomplete="current-password"/>
+
+  <button id="btn" type="submit">เข้าสู่ระบบ</button>
+  <div class="err" id="err"></div>
+</form>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./config.js"></script>
+<script src="./auth.js"></script>
+<script>
+  // ถ้า login อยู่แล้ว → ไป dashboard
+  tidtamAuth.session().then(s => { if (s) location.href = 'index.html'; });
+
+  const form = document.getElementById('form');
+  const btn  = document.getElementById('btn');
+  const err  = document.getElementById('err');
+
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    err.classList.remove('show');
+    btn.disabled = true;
+    btn.textContent = 'กำลังเข้าสู่ระบบ...';
+
+    const { error } = await sb.auth.signInWithPassword({
+      email: document.getElementById('email').value.trim(),
+      password: document.getElementById('pwd').value,
+    });
+
+    if (error) {
+      err.textContent = error.message === 'Invalid login credentials'
+        ? 'อีเมลหรือรหัสผ่านไม่ถูกต้อง'
+        : error.message;
+      err.classList.add('show');
+      btn.disabled = false;
+      btn.textContent = 'เข้าสู่ระบบ';
+      return;
+    }
+
+    location.href = 'index.html';
+  };
+</script>
+
+</body>
+</html>

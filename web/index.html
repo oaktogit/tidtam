@@ -303,6 +303,8 @@
     <span class="schip legacy"       id="p-leg">LEG 0</span>
   </div>
   <div id="clock"></div>
+  <a id="user-link" href="users.html" title="จัดการผู้ใช้" style="display:none;font-size:.7rem;color:var(--teal);text-decoration:none;padding:4px 8px;border:1.5px solid var(--teal-bd);border-radius:7px;background:var(--teal-lt);flex-shrink:0">👥</a>
+  <button class="rbtn" onclick="tidtamAuth.logout()" title="ออกจากระบบ" style="border-color:#FCA5A5;color:#B91C1C;background:#FEF2F2">⎋</button>
 </div>
 
 <!-- BODY -->
@@ -336,11 +338,19 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="./config.js"></script>
+<script src="./auth.js"></script>
 <script>
 /* ═══════════════════════════════════════
-   SUPABASE
+   AUTH GATE — ต้อง login ก่อนใช้งาน
 ═══════════════════════════════════════ */
-const sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+(async () => {
+  const s = await tidtamAuth.requireLogin();
+  if (!s) return;
+  const p = await tidtamAuth.profile();
+  if (p?.role === 'admin') {
+    document.getElementById('user-link').style.display = 'inline-block';
+  }
+})();
 
 /* ═══════════════════════════════════════
    MAP
