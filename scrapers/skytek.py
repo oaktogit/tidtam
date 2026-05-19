@@ -21,7 +21,8 @@ class SkytekScraper(BaseScraper):
         if self.password:
             await page.fill('input[name="tbPwd"]', self.password)
         await page.click('input[id="btnLogin"]')
-        await page.wait_for_url("**vehiclemonitor.aspx", timeout=60000)
+        await page.wait_for_load_state("load", timeout=60000)
+        print(f"[skytek] after login URL: {page.url}")
 
         return page.url.lower().endswith("vehiclemonitor.aspx")
 
