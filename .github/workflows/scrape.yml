@@ -3,7 +3,12 @@ name: Scrape GPS Data
 on:
   schedule:
     - cron: '0 */2 * * *'   # ทุก 2 ชั่วโมง
-  workflow_dispatch:          # กด Run manually ได้จาก GitHub UI
+  workflow_dispatch:          # กด Run manually ได้จาก GitHub UI / dashboard
+
+# กัน trigger ซ้อน: ถ้ารันอยู่แล้ว trigger ใหม่จะรอ ไม่ใช่รันพร้อมกัน
+concurrency:
+  group: scrape
+  cancel-in-progress: false
 
 jobs:
   scrape:

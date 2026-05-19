@@ -184,7 +184,11 @@
       flex-shrink: 0; font-size:.75rem; padding:3px 10px; border-radius:7px;
       border:1.5px solid var(--teal-bd); background:var(--teal-lt);
       color:var(--teal); cursor:pointer; font-family:'Kanit',sans-serif; font-weight:600;
+      transition: opacity .15s;
     }
+    .rbtn:disabled { opacity: .55; cursor: wait; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .rbtn.spinning { display:inline-block; animation: spin 1s linear infinite; }
 
     #vlist {
       padding: 8px;
@@ -335,7 +339,7 @@
     <div class="hstat hs"        onclick="setFilter('st')"  title="กรองเฉพาะรถจอด"><div class="v" id="s-s">0</div><div class="l">จอด</div></div>
     <div class="hstat ho"        onclick="setFilter('of')"  title="กรองเฉพาะออฟไลน์"><div class="v" id="s-o">0</div><div class="l">ออฟไลน์</div></div>
   </div>
-  <button class="rbtn" onclick="loadData()" title="รีเฟรช">↻</button>
+  <button id="refresh-btn" class="rbtn" onclick="refreshAll()" title="ดึงข้อมูลล่าสุดจากผู้ให้บริการ">↻</button>
   <div class="schips">
     <span class="schip skytek"       id="p-sky">SKY 0</span>
     <span class="schip geniustracks" id="p-gen">GEN 0</span>
@@ -579,12 +583,21 @@ function renderMarkers(list){
 ═══════════════════════════════════════ */
 const SRC_LABEL = {skytek:'S', geniustracks:'G', legacy:'L'};
 
+function toThaiTime(iso){
+  if(!iso) return '';
+  // updated_at from GHA is UTC but written as naive ISO (no Z) — append Z so Date treats it as UTC
+  const s = /[Z+\-]\d|[+\-]\d{2}:?\d{2}$/.test(iso) ? iso : iso + 'Z';
+  const d = new Date(s);
+  if(isNaN(d)) return '';
+  return d.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Bangkok'});
+}
+
 function cardHTML(v){
   const c=cls(v), spd=+v.speed||0, pct=Math.min(spd/120*100,100);
   const key=`${v.source}_${v.vehicle_id}`;
   const badge=c==='mv'?`${spd} km/h`:c==='of'?'OFFLINE':'จอด';
   const addr=(v.address||'').trim();
-  const time=(v.updated_at||'').slice(11,16);
+  const time=toThaiTime(v.updated_at);
   const tag=`<span class="src-tag ${v.source}">${SRC_LABEL[v.source]||'?'}</span>`;
   return `<div class="vcard ${c}" onclick="focusV('${key}')">
     <div class="car-icon">${SVG[c]()}</div>
@@ -690,12 +703,79 @@ async function loadData(){
   updateStats(vehicles);
 }
 
+/* ═══════════════════════════════════════
+   ON-DEMAND SCRAPE — kicks the GHA workflow,
+   then polls Supabase until updated_at advances
+═══════════════════════════════════════ */
+function latestUpdatedAt(list){
+  let max = 0;
+  for (const v of list || []) {
+    const s = v.updated_at;
+    if (!s) continue;
+    const t = Date.parse(/[Z+\-]\d|[+\-]\d{2}:?\d{2}$/.test(s) ? s : s + 'Z');
+    if (t > max) max = t;
+  }
+  return max;
+}
+
+let scrapeInFlight = false;
+
+async function triggerScrape(){
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) return { ok:false, error:'not signed in' };
+  const r = await fetch('/api/trigger-scrape', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${session.access_token}` },
+  });
+  if (r.status === 202) return { ok:true };
+  let body = {};
+  try { body = await r.json(); } catch {}
+  return { ok:false, error: body.error || `HTTP ${r.status}` };
+}
+
+async function refreshAll(){
+  if (scrapeInFlight) return;
+  scrapeInFlight = true;
+  const btn = document.getElementById('refresh-btn');
+  btn.disabled = true;
+  btn.classList.add('spinning');
+
+  const before = latestUpdatedAt(vehicles);
+  const trig = await triggerScrape();
+  if (!trig.ok) {
+    console.error('trigger-scrape failed:', trig.error);
+    // still try to load latest data; maybe scheduled run came through
+    await loadData();
+    btn.disabled = false;
+    btn.classList.remove('spinning');
+    scrapeInFlight = false;
+    return;
+  }
+
+  // poll Supabase until updated_at advances or we give up (~3 min)
+  const deadline = Date.now() + 180_000;
+  while (Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, 10_000));
+    await loadData();
+    if (latestUpdatedAt(vehicles) > before) break;
+  }
+
+  btn.disabled = false;
+  btn.classList.remove('spinning');
+  scrapeInFlight = false;
+}
+
 /* boot — only after auth gate passes; otherwise requireLogin() has already redirected to login.html */
 (async () => {
   const ok = await authGate();
   if (!ok) return;
   document.body.classList.add('authed');
   await loadData();
+  // auto-trigger a fresh scrape if newest row is older than 5 min
+  const ageMs = Date.now() - latestUpdatedAt(vehicles);
+  if (!latestUpdatedAt(vehicles) || ageMs > 5 * 60_000) {
+    refreshAll();
+  }
   setInterval(loadData, 60000);
 })();
 
