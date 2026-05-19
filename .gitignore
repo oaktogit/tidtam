@@ -5,5 +5,4 @@ __pycache__/
 .env
 venv/
 .venv/
-web/config.js
 .DS_Store
