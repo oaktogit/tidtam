@@ -1,0 +1,37 @@
+name: Scrape GPS Data
+
+on:
+  schedule:
+    - cron: '0 */2 * * *'   # ทุก 2 ชั่วโมง
+  workflow_dispatch:          # กด Run manually ได้จาก GitHub UI
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install Playwright browsers
+        run: playwright install chromium --with-deps
+
+      - name: Run scraper
+        run: python scrape.py
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SKYTEK_USERNAME: ${{ secrets.SKYTEK_USERNAME }}
+          SKYTEK_PASSWORD: ${{ secrets.SKYTEK_PASSWORD }}
+          GENIUSTRACKS_USERNAME: ${{ secrets.GENIUSTRACKS_USERNAME }}
+          GENIUSTRACKS_PASSWORD: ${{ secrets.GENIUSTRACKS_PASSWORD }}
+          LEGACY_ACCOUNT: ${{ secrets.LEGACY_ACCOUNT }}
+          LEGACY_USERNAME: ${{ secrets.LEGACY_USERNAME }}
+          LEGACY_PASSWORD: ${{ secrets.LEGACY_PASSWORD }}
