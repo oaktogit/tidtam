@@ -39,6 +39,9 @@
     @keyframes mPulse   { 0%{transform:scale(1);opacity:1} 70%{transform:scale(2.5);opacity:0} 100%{opacity:0} }
     @keyframes slideIn  { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:none} }
 
+    @keyframes driveJiggle { 0%,100%{transform:translate(0,0)} 25%{transform:translate(-.6px,.4px)} 50%{transform:translate(0,-.5px)} 75%{transform:translate(.6px,.4px)} }
+    @keyframes dustFloat   { 0%,100%{opacity:.25;transform:translateY(0) scale(.7)} 50%{opacity:1;transform:translateY(-3px) scale(1.1)} }
+
     .z1{animation:zFloat 2.2s ease-in-out 0s infinite}
     .z2{animation:zFloat 2.2s ease-in-out .7s infinite}
     .z3{animation:zFloat 2.2s ease-in-out 1.4s infinite}
@@ -49,6 +52,11 @@
     .spd2{animation:spdFlick .6s ease-in-out .2s  infinite;transform-origin:right center}
     .spd3{animation:spdFlick .6s ease-in-out .4s  infinite;transform-origin:right center}
     .mp  {animation:mPulse   1.8s ease-out   0s   infinite}
+
+    /* logo truck drives fast during a force-reload */
+    .logo.driving .logo-svg { animation: driveJiggle .15s linear infinite; }
+    .logo.driving .puff1, .logo.driving .puff2, .logo.driving .puff3 { animation-duration: .45s; }
+    .logo.driving .spd1, .logo.driving .spd2, .logo.driving .spd3   { animation-duration: .2s; }
 
     /* ════════════════════════════
        HEADER
@@ -68,9 +76,11 @@
       flex-shrink: 0;
     }
 
-    .logo { display: flex; align-items: center; gap: 5px; flex-shrink: 0; white-space: nowrap; }
-    .logo-svg { width: 32px; height: 19px; flex-shrink: 0; }
-    .logo-text { font-size: .8rem; font-weight: 500; color: var(--teal); letter-spacing: .3px; }
+    .logo { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; flex-shrink: 0; white-space: nowrap; line-height: 1; }
+    .logo-svg { width: 30px; height: 18px; flex-shrink: 0; overflow: visible; }
+    .logo-text { font-size: .56rem; font-weight: 800; letter-spacing: .9px; line-height: 1; font-family: 'Kanit', sans-serif; }
+    .logo-text .lg { color: var(--teal); }
+    .logo-text .lp { color: var(--salmon); }
 
     /* stats row — scrollable on small screens */
     .hstats {
@@ -102,24 +112,28 @@
 
     @media(max-width:560px) { .schips{display:none} #clock{display:none} }
     @media(max-width:480px) {
-      .hstat { padding: 2px 7px; }
-      .hstat .v { font-size: 1rem; }
-      .logo-svg { width: 28px; height: 17px; }
-      .logo-text { font-size: .75rem; }
+      .hstat { padding: 2px 6px; }
+      .hstat .v { font-size: .85rem; }
+      .hstat .l { font-size: .5rem; }
+      .logo-svg { width: 26px; height: 16px; }
+      .logo-text { font-size: .5rem; letter-spacing: .7px; }
     }
     @media(max-width:380px) {
       .hstat .l{display:none}
-      .hstat{padding:2px 6px}
-      .hstat .v { font-size: .9rem; }
+      .hstat{padding:2px 5px}
+      .hstat .v { font-size: .78rem; }
       #hdr { padding: 0 8px; gap: 6px; }
-      .logo-text { display: none; }
+      .logo-svg { width: 24px; height: 14px; }
+      .logo-text { font-size: .46rem; letter-spacing: .5px; }
     }
     @media(max-width:340px) {
-      .hstat{padding:1px 5px}
-      .hstat .v { font-size: .8rem; }
+      .hstat{padding:1px 4px}
+      .hstat .v { font-size: .7rem; }
       #menu-btn { width: 32px; height: 32px; }
       .rbtn { padding: 3px 7px; font-size: .68rem; }
       .hstats { gap: 3px; }
+      .logo-svg { width: 22px; height: 13px; }
+      .logo-text { font-size: .42rem; }
     }
 
     /* ════════════════════════════
@@ -186,9 +200,19 @@
       color:var(--teal); cursor:pointer; font-family:'Kanit',sans-serif; font-weight:600;
       transition: opacity .15s;
     }
-    .rbtn:disabled { opacity: .55; cursor: wait; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .rbtn.spinning { display:inline-block; animation: spin 1s linear infinite; }
+    .rbtn:disabled { opacity: .85; cursor: wait; }
+
+    /* refresh button: idle = ↻ glyph, busy = 3 floating dust dots (rect stays put) */
+    #refresh-btn { min-width: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 3px; }
+    #refresh-btn .r-busy { display: none; align-items: center; gap: 3px; height: 1em; }
+    #refresh-btn .r-busy .dot {
+      width: 4px; height: 4px; border-radius: 50%; background: var(--teal);
+      animation: dustFloat .9s ease-in-out infinite;
+    }
+    #refresh-btn .r-busy .dot:nth-child(2){ animation-delay: .15s; background: var(--teal-md); }
+    #refresh-btn .r-busy .dot:nth-child(3){ animation-delay: .30s; background: var(--teal-bd); }
+    #refresh-btn.busy .r-idle { display: none; }
+    #refresh-btn.busy .r-busy { display: inline-flex; }
 
     #vlist {
       padding: 8px;
@@ -316,22 +340,37 @@
 <!-- HEADER -->
 <div id="hdr">
   <button id="menu-btn" onclick="toggleSidebar()" title="เปิด/ปิดเมนู">☰</button>
-  <div class="logo" title="tidtam">
+  <div class="logo" id="logo" title="TIDTAM">
     <svg class="logo-svg" viewBox="0 0 140 82" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <rect x="6" y="12" width="72" height="48" rx="2" fill="#14B8A6"/>
-      <rect x="6" y="12" width="5" height="48" rx="1" fill="#0D9488"/>
-      <rect x="73" y="12" width="5" height="48" rx="1" fill="#0D9488"/>
-      <line x1="6" y1="36" x2="78" y2="36" stroke="#0D9488" stroke-width="2" opacity=".5"/>
+      <ellipse cx="66" cy="77" rx="58" ry="4" fill="rgba(0,0,0,.07)"/>
+      <circle cx="119" cy="9" r="5.5" fill="#CBD5E1" class="puff1"/>
+      <circle cx="119" cy="4" r="4"   fill="#E2E8F0" class="puff2"/>
+      <circle cx="119" cy="0" r="3"   fill="#F1F5F9" class="puff3"/>
+      <line x1="8" y1="36" x2="-2" y2="36" stroke="#99F6E4" stroke-width="2"   stroke-linecap="round" class="spd1"/>
+      <line x1="8" y1="43" x2="-4" y2="43" stroke="#CCFBF1" stroke-width="1.5" stroke-linecap="round" class="spd2"/>
+      <line x1="8" y1="50" x2="-1" y2="50" stroke="#99F6E4" stroke-width="2"   stroke-linecap="round" class="spd3"/>
+      <rect x="6"  y="12" width="72" height="48" rx="2" fill="#14B8A6"/>
+      <rect x="6"  y="12" width="5"  height="48" rx="1" fill="#0D9488"/>
+      <rect x="73" y="12" width="5"  height="48" rx="1" fill="#0D9488"/>
+      <line x1="6" y1="24" x2="78" y2="24" stroke="#0D9488" stroke-width="2" opacity=".65"/>
+      <line x1="6" y1="36" x2="78" y2="36" stroke="#0D9488" stroke-width="2" opacity=".65"/>
+      <line x1="6" y1="48" x2="78" y2="48" stroke="#0D9488" stroke-width="2" opacity=".65"/>
+      <line x1="42" y1="12" x2="42" y2="60" stroke="#0D9488" stroke-width="1.5" opacity=".5"/>
       <rect x="82" y="18" width="46" height="42" rx="10" fill="#0D9488"/>
-      <rect x="86" y="23" width="22" height="22" rx="5" fill="#BAE6FD" opacity=".9"/>
-      <circle cx="28" cy="68" r="11" fill="#1E293B"/><circle cx="28" cy="68" r="4" fill="#6B7280"/>
-      <circle cx="52" cy="68" r="11" fill="#1E293B"/><circle cx="52" cy="68" r="4" fill="#6B7280"/>
-      <circle cx="106" cy="68" r="13" fill="#1E293B"/><circle cx="106" cy="68" r="5" fill="#6B7280"/>
-      <path d="M88 30 Q91.5 28 95 30" stroke="#134E4A" stroke-width="2.4" fill="none" stroke-linecap="round"/>
-      <path d="M97 30 Q100.5 28 104 30" stroke="#134E4A" stroke-width="2.4" fill="none" stroke-linecap="round"/>
-      <path d="M89 37 Q92.5 40 96 37" stroke="#134E4A" stroke-width="1.7" fill="none" stroke-linecap="round"/>
+      <rect x="86" y="23" width="22" height="22" rx="5"  fill="#BAE6FD" opacity=".9"/>
+      <rect x="113" y="11" width="7" height="13" rx="3" fill="#0F766E"/>
+      <ellipse cx="129" cy="40" rx="5"   ry="4.5" fill="#FEF08A"/>
+      <ellipse cx="129" cy="40" rx="7.5" ry="6"   fill="#FEF9C3" opacity=".35"/>
+      <rect x="6"   y="35" width="4" height="9" rx="2" fill="#FCA5A5"/>
+      <rect x="126" y="51" width="8" height="4" rx="2" fill="#134E4A"/>
+      <circle cx="28"  cy="68" r="11" fill="#1E293B"/><circle cx="28"  cy="68" r="4.5" fill="#374151"/><circle cx="28"  cy="68" r="2"   fill="#6B7280"/>
+      <circle cx="52"  cy="68" r="11" fill="#1E293B"/><circle cx="52"  cy="68" r="4.5" fill="#374151"/><circle cx="52"  cy="68" r="2"   fill="#6B7280"/>
+      <circle cx="106" cy="68" r="13" fill="#1E293B"/><circle cx="106" cy="68" r="5.5" fill="#374151"/><circle cx="106" cy="68" r="2.5" fill="#6B7280"/>
+      <path d="M88 30 Q91.5 28 95 30"   stroke="#134E4A" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+      <path d="M97 30 Q100.5 28 104 30" stroke="#134E4A" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+      <path d="M89 37 Q92.5 39.5 96 37" stroke="#134E4A" stroke-width="1.5" fill="none" stroke-linecap="round"/>
     </svg>
-    <span class="logo-text">tidtam</span>
+    <span class="logo-text"><span class="lg">TID</span><span class="lp">TAM</span></span>
   </div>
   <div class="hstats">
     <div class="hstat ht active" onclick="setFilter('all')" title="แสดงทั้งหมด"><div class="v" id="s-t">0</div><div class="l">ทั้งหมด</div></div>
@@ -339,7 +378,10 @@
     <div class="hstat hs"        onclick="setFilter('st')"  title="กรองเฉพาะรถจอด"><div class="v" id="s-s">0</div><div class="l">จอด</div></div>
     <div class="hstat ho"        onclick="setFilter('of')"  title="กรองเฉพาะออฟไลน์"><div class="v" id="s-o">0</div><div class="l">ออฟไลน์</div></div>
   </div>
-  <button id="refresh-btn" class="rbtn" onclick="refreshAll()" title="ดึงข้อมูลล่าสุดจากผู้ให้บริการ">↻</button>
+  <button id="refresh-btn" class="rbtn" onclick="refreshAll()" title="ดึงข้อมูลล่าสุดจากผู้ให้บริการ">
+    <span class="r-idle">↻</span>
+    <span class="r-busy" aria-hidden="true"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>
+  </button>
   <div class="schips">
     <span class="schip skytek"       id="p-sky">SKY 0</span>
     <span class="schip geniustracks" id="p-gen">GEN 0</span>
@@ -737,9 +779,18 @@ async function triggerScrape(){
 async function refreshAll(){
   if (scrapeInFlight) return;
   scrapeInFlight = true;
-  const btn = document.getElementById('refresh-btn');
+  const btn  = document.getElementById('refresh-btn');
+  const logo = document.getElementById('logo');
   btn.disabled = true;
-  btn.classList.add('spinning');
+  btn.classList.add('busy');
+  logo.classList.add('driving');
+
+  const stop = () => {
+    btn.disabled = false;
+    btn.classList.remove('busy');
+    logo.classList.remove('driving');
+    scrapeInFlight = false;
+  };
 
   const before = latestUpdatedAt(vehicles);
   const trig = await triggerScrape();
@@ -747,9 +798,7 @@ async function refreshAll(){
     console.error('trigger-scrape failed:', trig.error);
     // still try to load latest data; maybe scheduled run came through
     await loadData();
-    btn.disabled = false;
-    btn.classList.remove('spinning');
-    scrapeInFlight = false;
+    stop();
     return;
   }
 
@@ -761,9 +810,7 @@ async function refreshAll(){
     if (latestUpdatedAt(vehicles) > before) break;
   }
 
-  btn.disabled = false;
-  btn.classList.remove('spinning');
-  scrapeInFlight = false;
+  stop();
 }
 
 /* boot — only after auth gate passes; otherwise requireLogin() has already redirected to login.html */
