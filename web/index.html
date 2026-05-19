@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+  <title>Tidtam GPS</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@400;600;700&family=Share+Tech+Mono&display=swap');
+
+    :root {
+      --teal:    #0D9488;
+      --teal-md: #14B8A6;
+      --teal-lt: #CCFBF1;
+      --teal-bd: #99F6E4;
+      --salmon:  #F43F5E;
+      --amber:   #F59E0B;
+      --green:   #22C55E;
+      --gray:    #9CA3AF;
+      --bg:      #F0FDFA;
+      --surface: #FFFFFF;
+      --border:  #E2E8F0;
+      --text:    #134E4A;
+      --dim:     #64748B;
+      --sidebar: 320px;
+      --hdr:     52px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Kanit', sans-serif; background: var(--bg); color: var(--text); }
+
+    /* ── animations ── */
+    @keyframes zFloat   { 0%{opacity:0;transform:translateY(0)scale(.7)} 25%{opacity:1} 100%{opacity:0;transform:translateY(-18px)scale(1.2)} }
+    @keyframes puffOut  { 0%{opacity:.75;transform:translate(0,0)scale(.6)} 100%{opacity:0;transform:translate(-22px,-4px)scale(1.6)} }
+    @keyframes spdFlick { 0%,100%{opacity:.7;transform:scaleX(1)} 50%{opacity:.2;transform:scaleX(.6)} }
+    @keyframes mPulse   { 0%{transform:scale(1);opacity:1} 70%{transform:scale(2.5);opacity:0} 100%{opacity:0} }
+    @keyframes slideIn  { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:none} }
+
+    .z1{animation:zFloat 2.2s ease-in-out 0s infinite}
+    .z2{animation:zFloat 2.2s ease-in-out .7s infinite}
+    .z3{animation:zFloat 2.2s ease-in-out 1.4s infinite}
+    .puff1{animation:puffOut 1.1s ease-out 0s infinite}
+    .puff2{animation:puffOut 1.1s ease-out .37s infinite}
+    .puff3{animation:puffOut 1.1s ease-out .74s infinite}
+    .spd1{animation:spdFlick .6s ease-in-out 0s   infinite;transform-origin:right center}
+    .spd2{animation:spdFlick .6s ease-in-out .2s  infinite;transform-origin:right center}
+    .spd3{animation:spdFlick .6s ease-in-out .4s  infinite;transform-origin:right center}
+    .mp  {animation:mPulse   1.8s ease-out   0s   infinite}
+
+    /* ════════════════════════════
+       HEADER
+    ════════════════════════════ */
+    #hdr {
+      position: fixed; inset: 0 0 auto 0; height: var(--hdr); z-index: 600;
+      background: var(--surface); border-bottom: 2px solid var(--teal-bd);
+      box-shadow: 0 2px 10px rgba(13,148,136,.10);
+      display: flex; align-items: center; gap: 8px; padding: 0 14px;
+    }
+
+    /* hamburger — always visible */
+    #menu-btn {
+      width: 36px; height: 36px; border-radius: 8px; border: 1.5px solid var(--teal-bd);
+      background: var(--teal-lt); color: var(--teal); font-size: 1rem;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .logo { font-size: .95rem; font-weight: 700; color: var(--teal); white-space: nowrap; }
+    .logo em { color: var(--salmon); font-style: normal; }
+
+    /* stats row — scrollable on small screens */
+    .hstats {
+      display: flex; gap: 6px; flex: 1;
+      overflow-x: auto; scrollbar-width: none;
+    }
+    .hstats::-webkit-scrollbar { display: none; }
+    .hstat {
+      flex-shrink: 0; background: var(--bg); border: 1.5px solid var(--border);
+      border-radius: 9px; padding: 3px 10px; text-align: center;
+      cursor: pointer; transition: all .15s; user-select: none;
+    }
+    .hstat:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(13,148,136,.15); }
+    .hstat.active { background: var(--teal-lt) !important; border-color: var(--teal-md) !important; }
+    .hstat .v { font-family:'Share Tech Mono',monospace; font-size:1.1rem; font-weight:bold; line-height:1.1; }
+    .hstat .l { font-size:.55rem; color: var(--dim); }
+    .hstat.ht{border-color:var(--teal-bd)}  .hstat.ht .v{color:var(--teal)}
+    .hstat.hm{border-color:#86EFAC}         .hstat.hm .v{color:#16A34A}
+    .hstat.hs{border-color:#FCD34D}         .hstat.hs .v{color:var(--amber)}
+    .hstat.ho{border-color:var(--border)}   .hstat.ho .v{color:var(--gray)}
+
+    .schips { display: flex; gap: 4px; flex-shrink: 0; }
+    .schip  { font-size:.6rem; padding:2px 7px; border-radius:99px; border:1.5px solid; font-weight:600; white-space:nowrap; }
+    .schip.skytek       { border-color:#38BDF8; color:#0284C7; background:#F0F9FF; }
+    .schip.geniustracks { border-color:#A78BFA; color:#7C3AED; background:#F5F3FF; }
+    .schip.legacy       { border-color:#FB923C; color:#EA580C; background:#FFF7ED; }
+
+    #clock { font-family:'Share Tech Mono',monospace; font-size:.72rem; color:var(--dim); flex-shrink:0; }
+
+    @media(max-width:560px) { .schips{display:none} #clock{display:none} }
+    @media(max-width:380px) { .hstat .l{display:none} .hstat{padding:3px 7px} }
+
+    /* ════════════════════════════
+       BODY LAYOUT
+    ════════════════════════════ */
+    #body { position: fixed; inset: var(--hdr) 0 0 0; }
+
+    /* ════════════════════════════
+       SIDEBAR — fixed so height is always bounded
+    ════════════════════════════ */
+    #sidebar {
+      position: fixed;
+      top: var(--hdr); bottom: 0; left: 0;
+      width: var(--sidebar);
+      background: var(--surface);
+      border-right: 1.5px solid var(--border);
+      display: flex; flex-direction: column;
+      flex-shrink: 0;
+      transition: width .28s ease, transform .28s ease;
+      overflow: hidden;
+      z-index: 100;
+    }
+
+    /* collapsed → mini strip */
+    #sidebar.mini {
+      width: 48px;
+    }
+    #sidebar.mini #sb-inner { opacity: 0; pointer-events: none; }
+    #sidebar.mini #sb-mini  { display: flex; }
+
+    /* mini strip */
+    #sb-mini {
+      display: none;
+      flex-direction: column; align-items: center;
+      padding: 14px 0; gap: 12px;
+    }
+    .mstat {
+      width: 34px; height: 34px; border-radius: 9px; border: 1.5px solid;
+      display: flex; align-items: center; justify-content: center;
+      font-family:'Share Tech Mono',monospace; font-size:.85rem; font-weight:bold;
+      cursor: pointer; transition: transform .15s;
+    }
+    .mstat:hover { transform: scale(1.1); }
+    .mstat.mv { border-color:#86EFAC; color:#16A34A; background:#F0FDF4; }
+    .mstat.st { border-color:#FCD34D; color:var(--amber); background:#FFFBEB; }
+    .mstat.of { border-color:var(--border); color:var(--gray); background:var(--bg); }
+
+    /* full sidebar content — IS the scroll container itself */
+    #sb-inner {
+      position: absolute;
+      inset: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+      transition: opacity .2s;
+    }
+    #sb-inner::-webkit-scrollbar { width: 4px; }
+    #sb-inner::-webkit-scrollbar-thumb { background: var(--teal-bd); border-radius: 2px; }
+
+    .rbtn {
+      flex-shrink: 0; font-size:.75rem; padding:3px 10px; border-radius:7px;
+      border:1.5px solid var(--teal-bd); background:var(--teal-lt);
+      color:var(--teal); cursor:pointer; font-family:'Kanit',sans-serif; font-weight:600;
+    }
+
+    #vlist {
+      padding: 8px;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+
+    /* section header — collapsible */
+    .sec-hdr {
+      display: flex; align-items: center; gap: 7px;
+      font-size: .66rem; font-weight: 700; padding: 7px 5px 3px;
+      cursor: pointer; user-select: none; border-radius: 7px;
+      transition: background .15s;
+    }
+    .sec-hdr:hover { background: var(--bg); }
+    .sec-hdr .ln  { flex: 1; height: 1.5px; border-radius: 1px; }
+    .sec-hdr .arr { font-size: .58rem; transition: transform .25s; }
+    .sec-hdr.mv { color:#16A34A; }  .sec-hdr.mv .ln { background:#86EFAC; }
+    .sec-hdr.st { color:var(--amber); } .sec-hdr.st .ln { background:#FCD34D; }
+    .sec-hdr.of { color:var(--gray); }  .sec-hdr.of .ln { background:var(--border); }
+
+    .sec-body { display:flex; flex-direction:column; gap:4px; overflow:hidden; max-height:9999px; transition:max-height .3s ease; }
+    .sec-body.shut { max-height: 0 !important; }
+
+    /* ── vehicle card ── */
+    .vcard {
+      background: var(--surface); border: 1.5px solid var(--border); border-radius: 11px;
+      padding: 8px 10px; cursor: pointer; display: flex; gap: 9px; align-items: center;
+      transition: box-shadow .15s, border-color .15s;
+      animation: slideIn .22s ease;
+    }
+    .vcard:hover { box-shadow:0 3px 12px rgba(13,148,136,.12); border-color:var(--teal-bd); }
+    .vcard.mv { border-left: 4px solid var(--green); }
+    .vcard.st { border-left: 4px solid var(--amber); }
+    .vcard.of { border-left: 4px solid var(--border); background:var(--bg); opacity:.75; }
+
+    .car-icon { width: 62px; flex-shrink: 0; }
+    .vbody    { flex: 1; min-width: 0; }
+
+    .plate { font-family:'Share Tech Mono',monospace; font-size:.9rem; font-weight:bold; letter-spacing:1px; }
+    .vcard.mv .plate { color:#15803D; }
+    .vcard.of .plate { color:var(--gray); }
+
+    .badge {
+      display:inline-block; font-size:.56rem; padding:1px 6px; border-radius:99px;
+      font-weight:700; margin-left:5px; vertical-align:middle;
+    }
+    .vcard.mv .badge { background:#DCFCE7; color:#15803D; border:1px solid #86EFAC; }
+    .vcard.st .badge { background:#FEF3C7; color:#92400E; border:1px solid #FCD34D; }
+    .vcard.of .badge { background:var(--bg); color:var(--gray); border:1px solid var(--border); }
+
+    .spdrow { display:flex; align-items:center; gap:5px; margin-top:4px; }
+    .spdbar { flex:1; height:4px; background:var(--border); border-radius:2px; overflow:hidden; }
+    .spdfil { height:100%; border-radius:2px; transition:width .5s; }
+    .vcard.mv .spdfil { background:var(--green); }
+    .vcard.st .spdfil { background:var(--amber); }
+    .spdnum { font-family:'Share Tech Mono',monospace; font-size:.62rem; color:var(--dim); min-width:50px; text-align:right; }
+
+    .addr { font-size:.63rem; color:var(--dim); margin-top:2px; margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.3; }
+    .meta { display:flex; gap:5px; align-items:center; margin-top:4px; font-size:.58rem; color:var(--dim); }
+
+    /* provider circular tag */
+    .src-tag {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 20px; height: 20px; border-radius: 50%;
+      font-size: .6rem; font-weight: 700; flex-shrink: 0;
+      font-family: 'Share Tech Mono', monospace;
+    }
+    .src-tag.skytek       { background:#E0F2FE; color:#0284C7; border:1px solid #38BDF8; }
+    .src-tag.geniustracks { background:#F5F3FF; color:#7C3AED; border:1px solid #A78BFA; }
+    .src-tag.legacy       { background:#FFF7ED; color:#EA580C; border:1px solid #FB923C; }
+
+    /* ════════════════════════════
+       MAP — fixed, left edge follows sidebar width
+    ════════════════════════════ */
+    #mapwrap {
+      position: fixed;
+      top: var(--hdr); bottom: 0;
+      left: var(--sidebar); right: 0;
+      overflow: hidden;
+      transition: left .28s ease;
+    }
+    #map     { width: 100%; height: 100%; }
+
+    /* ════════════════════════════
+       OVERLAY — อยู่ใน mapwrap ทับแค่แผนที่
+       sidebar อยู่นอก mapwrap จึงไม่ถูกทับ
+    ════════════════════════════ */
+    #overlay {
+      display: none;
+      position: absolute; inset: 0; z-index: 10;
+      background: rgba(0,0,0,.25);
+      cursor: pointer;
+    }
+
+    /* ════════════════════════════
+       MOBILE DRAWER (< 640px)
+       sidebar slides in from left as overlay
+    ════════════════════════════ */
+    @media (max-width: 639px) {
+      #sidebar {
+        width: 300px !important;
+        transform: translateX(-100%);
+        z-index: 500;
+        box-shadow: 4px 0 24px rgba(0,0,0,.15);
+        border-right: none;
+      }
+      #sidebar.drawer-open { transform: translateX(0); }
+      #sidebar.mini        { width: 300px !important; }
+      #sb-mini             { display: none !important; }
+      #sb-inner {
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        width: 300px !important;
+      }
+      /* map fills full width — sidebar draws over it */
+      #mapwrap { left: 0 !important; }
+    }
+
+    /* leaflet */
+    .leaflet-popup-content-wrapper { border-radius:10px; font-family:'Kanit',sans-serif; font-size:13px; }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div id="hdr">
+  <button id="menu-btn" onclick="toggleSidebar()" title="เปิด/ปิดเมนู">☰</button>
+  <div class="logo">🛰 Tid<em>tam</em></div>
+  <div class="hstats">
+    <div class="hstat ht active" onclick="setFilter('all')" title="แสดงทั้งหมด"><div class="v" id="s-t">0</div><div class="l">ทั้งหมด</div></div>
+    <div class="hstat hm"        onclick="setFilter('mv')"  title="กรองเฉพาะรถวิ่ง"><div class="v" id="s-m">0</div><div class="l">วิ่ง</div></div>
+    <div class="hstat hs"        onclick="setFilter('st')"  title="กรองเฉพาะรถจอด"><div class="v" id="s-s">0</div><div class="l">จอด</div></div>
+    <div class="hstat ho"        onclick="setFilter('of')"  title="กรองเฉพาะออฟไลน์"><div class="v" id="s-o">0</div><div class="l">ออฟไลน์</div></div>
+  </div>
+  <button class="rbtn" onclick="loadData()" title="รีเฟรช">↻</button>
+  <div class="schips">
+    <span class="schip skytek"       id="p-sky">SKY 0</span>
+    <span class="schip geniustracks" id="p-gen">GEN 0</span>
+    <span class="schip legacy"       id="p-leg">LEG 0</span>
+  </div>
+  <div id="clock"></div>
+</div>
+
+<!-- BODY -->
+<div id="body">
+
+  <!-- SIDEBAR -->
+  <div id="sidebar">
+
+    <!-- mini strip (desktop collapsed) -->
+    <div id="sb-mini">
+      <div class="mstat mv" onclick="expandTo('mv')" title="วิ่ง"><span id="mm-m">0</span></div>
+      <div class="mstat st" onclick="expandTo('st')" title="จอด"><span id="mm-s">0</span></div>
+      <div class="mstat of" onclick="expandTo('of')" title="ออฟไลน์"><span id="mm-o">0</span></div>
+    </div>
+
+    <!-- full content -->
+    <div id="sb-inner">
+      <div id="vlist"></div>
+    </div>
+  </div>
+
+  <!-- MAP -->
+  <div id="mapwrap">
+    <div id="map"></div>
+    <!-- overlay อยู่ใน mapwrap — ทับแค่แผนที่ ไม่ทับ sidebar -->
+    <div id="overlay" onclick="closeSidebar()"></div>
+  </div>
+
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./config.js"></script>
+<script>
+/* ═══════════════════════════════════════
+   SUPABASE
+═══════════════════════════════════════ */
+const sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+
+/* ═══════════════════════════════════════
+   MAP
+═══════════════════════════════════════ */
+const map = L.map('map',{zoomControl:false}).setView([10.0,98.6],9);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{attribution:'© CartoDB'}).addTo(map);
+L.control.zoom({position:'bottomright'}).addTo(map);
+
+/* ═══════════════════════════════════════
+   CAR SVGs
+═══════════════════════════════════════ */
+const SVG = {
+  /* รถบรรทุก container วิ่งอยู่ — teal, ตาง่วง (swapped), ควันพ่น + เส้นความเร็ว */
+  mv: () => `<svg viewBox="0 0 140 82" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;width:100%;height:auto">
+    <ellipse cx="66" cy="77" rx="58" ry="4" fill="rgba(0,0,0,.07)"/>
+    <circle cx="119" cy="9" r="5.5" fill="#CBD5E1" class="puff1"/>
+    <circle cx="119" cy="4" r="4"   fill="#E2E8F0" class="puff2"/>
+    <circle cx="119" cy="0" r="3"   fill="#F1F5F9" class="puff3"/>
+    <line x1="8"  y1="36" x2="-2" y2="36" stroke="#99F6E4" stroke-width="2"   stroke-linecap="round" class="spd1"/>
+    <line x1="8"  y1="43" x2="-4" y2="43" stroke="#CCFBF1" stroke-width="1.5" stroke-linecap="round" class="spd2"/>
+    <line x1="8"  y1="50" x2="-1" y2="50" stroke="#99F6E4" stroke-width="2"   stroke-linecap="round" class="spd3"/>
+    <!-- container box -->
+    <rect x="6"  y="12" width="72" height="48" rx="2" fill="#14B8A6"/>
+    <rect x="6"  y="12" width="5"  height="48" rx="1" fill="#0D9488"/>
+    <rect x="73" y="12" width="5"  height="48" rx="1" fill="#0D9488"/>
+    <line x1="6"  y1="24" x2="78" y2="24" stroke="#0D9488" stroke-width="2" opacity=".65"/>
+    <line x1="6"  y1="36" x2="78" y2="36" stroke="#0D9488" stroke-width="2" opacity=".65"/>
+    <line x1="6"  y1="48" x2="78" y2="48" stroke="#0D9488" stroke-width="2" opacity=".65"/>
+    <line x1="42" y1="12" x2="42" y2="60" stroke="#0D9488" stroke-width="1.5" opacity=".5"/>
+    <!-- cab -->
+    <rect x="82" y="18" width="46" height="42" rx="10" fill="#0D9488"/>
+    <rect x="86" y="23" width="22" height="22" rx="5"  fill="#BAE6FD" opacity=".9"/>
+    <rect x="113" y="11" width="7" height="13" rx="3"  fill="#0F766E"/>
+    <ellipse cx="129" cy="40" rx="5"   ry="4.5" fill="#FEF08A"/>
+    <ellipse cx="129" cy="40" rx="7.5" ry="6"   fill="#FEF9C3" opacity=".35"/>
+    <rect x="6"   y="35" width="4" height="9"  rx="2" fill="#FCA5A5"/>
+    <rect x="126" y="51" width="8" height="4"  rx="2" fill="#134E4A"/>
+    <!-- wheels -->
+    <circle cx="28"  cy="68" r="11" fill="#1E293B"/><circle cx="28"  cy="68" r="4.5" fill="#374151"/><circle cx="28"  cy="68" r="2"   fill="#6B7280"/>
+    <circle cx="52"  cy="68" r="11" fill="#1E293B"/><circle cx="52"  cy="68" r="4.5" fill="#374151"/><circle cx="52"  cy="68" r="2"   fill="#6B7280"/>
+    <circle cx="106" cy="68" r="13" fill="#1E293B"/><circle cx="106" cy="68" r="5.5" fill="#374151"/><circle cx="106" cy="68" r="2.5" fill="#6B7280"/>
+    <!-- ตาง่วง (swapped) -->
+    <path d="M88 30 Q91.5 28 95 30" stroke="#134E4A" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+    <path d="M97 30 Q100.5 28 104 30" stroke="#134E4A" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+    <path d="M89 37 Q92.5 39.5 96 37" stroke="#134E4A" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+  </svg>`,
+
+  /* รถบรรทุก container จอด — amber, ตาตื่นตัว (swapped), ZZZ */
+  st: () => `<svg viewBox="0 0 140 82" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;width:100%;height:auto">
+    <ellipse cx="66" cy="77" rx="56" ry="4" fill="rgba(0,0,0,.07)"/>
+    <!-- container box -->
+    <rect x="6"  y="12" width="72" height="48" rx="2" fill="#FBBF24"/>
+    <rect x="6"  y="12" width="5"  height="48" rx="1" fill="#F59E0B"/>
+    <rect x="73" y="12" width="5"  height="48" rx="1" fill="#F59E0B"/>
+    <line x1="6"  y1="24" x2="78" y2="24" stroke="#F59E0B" stroke-width="2" opacity=".65"/>
+    <line x1="6"  y1="36" x2="78" y2="36" stroke="#F59E0B" stroke-width="2" opacity=".65"/>
+    <line x1="6"  y1="48" x2="78" y2="48" stroke="#F59E0B" stroke-width="2" opacity=".65"/>
+    <line x1="42" y1="12" x2="42" y2="60" stroke="#F59E0B" stroke-width="1.5" opacity=".5"/>
+    <!-- cab -->
+    <rect x="82" y="18" width="46" height="42" rx="10" fill="#F59E0B"/>
+    <rect x="86" y="23" width="22" height="22" rx="5"  fill="#BAE6FD" opacity=".9"/>
+    <rect x="113" y="11" width="7" height="13" rx="3"  fill="#D97706"/>
+    <ellipse cx="129" cy="40" rx="5" ry="4.5" fill="#FEF9C3" opacity=".6"/>
+    <rect x="6"   y="35" width="4" height="9"  rx="2" fill="#FCA5A5"/>
+    <!-- wheels -->
+    <circle cx="28"  cy="68" r="11" fill="#1E293B"/><circle cx="28"  cy="68" r="4.5" fill="#374151"/><circle cx="28"  cy="68" r="2"   fill="#6B7280"/>
+    <circle cx="52"  cy="68" r="11" fill="#1E293B"/><circle cx="52"  cy="68" r="4.5" fill="#374151"/><circle cx="52"  cy="68" r="2"   fill="#6B7280"/>
+    <circle cx="106" cy="68" r="13" fill="#1E293B"/><circle cx="106" cy="68" r="5.5" fill="#374151"/><circle cx="106" cy="68" r="2.5" fill="#6B7280"/>
+    <!-- ตาตื่นตัว (swapped) -->
+    <path d="M88 27 L91 30 L94 27" stroke="#92400E" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M97 27 L100 30 L103 27" stroke="#92400E" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <line x1="88" y1="35" x2="103" y2="35" stroke="#92400E" stroke-width="1.5" stroke-linecap="round" opacity=".4"/>
+    <!-- ZZZ -->
+    <text x="108" y="26" font-size="9"  font-weight="800" fill="#9CA3AF" class="z1" font-family="sans-serif">z</text>
+    <text x="116" y="17" font-size="11" font-weight="800" fill="#CBD5E1" class="z2" font-family="sans-serif">z</text>
+    <text x="124" y="8"  font-size="13" font-weight="800" fill="#E2E8F0" class="z3" font-family="sans-serif">z</text>
+  </svg>`,
+
+  /* รถบรรทุก container ออฟไลน์ — gray, X eyes */
+  of: () => `<svg viewBox="0 0 140 82" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="66" cy="77" rx="56" ry="4" fill="rgba(0,0,0,.04)"/>
+    <!-- container box -->
+    <rect x="6"  y="12" width="72" height="48" rx="2" fill="#CBD5E1"/>
+    <rect x="6"  y="12" width="5"  height="48" rx="1" fill="#9CA3AF"/>
+    <rect x="73" y="12" width="5"  height="48" rx="1" fill="#9CA3AF"/>
+    <line x1="6"  y1="24" x2="78" y2="24" stroke="#9CA3AF" stroke-width="2" opacity=".5"/>
+    <line x1="6"  y1="36" x2="78" y2="36" stroke="#9CA3AF" stroke-width="2" opacity=".5"/>
+    <line x1="6"  y1="48" x2="78" y2="48" stroke="#9CA3AF" stroke-width="2" opacity=".5"/>
+    <line x1="42" y1="12" x2="42" y2="60" stroke="#9CA3AF" stroke-width="1.5" opacity=".5"/>
+    <!-- cab -->
+    <rect x="82" y="18" width="46" height="42" rx="10" fill="#D1D5DB"/>
+    <rect x="86" y="23" width="22" height="22" rx="5"  fill="#E5E7EB" opacity=".9"/>
+    <rect x="113" y="11" width="7" height="13" rx="3"  fill="#9CA3AF"/>
+    <ellipse cx="129" cy="40" rx="5" ry="4.5" fill="#E5E7EB"/>
+    <rect x="6"   y="35" width="4" height="9"  rx="2" fill="#D1D5DB"/>
+    <!-- wheels -->
+    <circle cx="28"  cy="68" r="11" fill="#9CA3AF"/><circle cx="28"  cy="68" r="4.5" fill="#D1D5DB"/>
+    <circle cx="52"  cy="68" r="11" fill="#9CA3AF"/><circle cx="52"  cy="68" r="4.5" fill="#D1D5DB"/>
+    <circle cx="106" cy="68" r="13" fill="#9CA3AF"/><circle cx="106" cy="68" r="5.5" fill="#CBD5E1"/>
+    <!-- X eyes -->
+    <line x1="88" y1="24" x2="94" y2="32" stroke="#9CA3AF" stroke-width="2.2" stroke-linecap="round"/>
+    <line x1="94" y1="24" x2="88" y2="32" stroke="#9CA3AF" stroke-width="2.2" stroke-linecap="round"/>
+    <line x1="99" y1="24" x2="105" y2="32" stroke="#9CA3AF" stroke-width="2.2" stroke-linecap="round"/>
+    <line x1="105" y1="24" x2="99" y2="32" stroke="#9CA3AF" stroke-width="2.2" stroke-linecap="round"/>
+  </svg>`
+};
+
+/* ═══════════════════════════════════════
+   STATE
+═══════════════════════════════════════ */
+let vehicles=[], markers={}, filter='all';
+const secOpen = {mv:true, st:true, of:false};
+
+const OFFLINE = ['offline','ไม่เชื่อมต่อ'];
+const MOVING  = ['moving','กำลังวิ่ง','run'];
+function cls(v){ const s=(v.status||'').toLowerCase(); return OFFLINE.includes(s)?'of':MOVING.includes(s)||+v.speed>0?'mv':'st'; }
+
+/* ═══════════════════════════════════════
+   SIDEBAR TOGGLE
+═══════════════════════════════════════ */
+const isMobile = () => window.innerWidth < 640;
+
+function setMapLeft(mini){
+  document.getElementById('mapwrap').style.left = mini ? '48px' : 'var(--sidebar)';
+}
+function toggleSidebar(){
+  const sb  = document.getElementById('sidebar');
+  const ovl = document.getElementById('overlay');
+  if(isMobile()){
+    const open = sb.classList.toggle('drawer-open');
+    ovl.style.display = open ? 'block' : 'none';
+  } else {
+    ovl.style.display = 'none';
+    const mini = sb.classList.toggle('mini');
+    setMapLeft(mini);
+    setTimeout(()=>map.invalidateSize(), 300);
+  }
+}
+function closeSidebar(){
+  document.getElementById('sidebar').classList.remove('drawer-open');
+  document.getElementById('overlay').style.display = 'none';
+}
+function expandTo(f){
+  const sb = document.getElementById('sidebar');
+  sb.classList.remove('mini');
+  setMapLeft(false);
+  setFilter(f);
+  setTimeout(()=>map.invalidateSize(), 300);
+}
+
+/* ═══════════════════════════════════════
+   SECTION COLLAPSE
+═══════════════════════════════════════ */
+function toggleSec(k){
+  secOpen[k] = !secOpen[k];
+  const body = document.getElementById('sb-'+k);
+  const arr  = document.getElementById('ar-'+k);
+  if(body) body.classList.toggle('shut', !secOpen[k]);
+  if(arr)  arr.textContent = secOpen[k] ? '▼' : '▶';
+}
+
+/* ═══════════════════════════════════════
+   MARKERS
+═══════════════════════════════════════ */
+function mkIcon(c){
+  const col={mv:'#22C55E',st:'#F59E0B',of:'#9CA3AF'}[c];
+  const pulse = c==='mv' ? `<div class="mp" style="position:absolute;inset:0;border-radius:50%;background:${col}"></div>` : '';
+  return L.divIcon({className:'',
+    html:`<div style="position:relative;width:14px;height:14px">${pulse}<div style="position:absolute;inset:0;border-radius:50%;background:${col};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.2)"></div></div>`,
+    iconSize:[14,14],iconAnchor:[7,7]});
+}
+function renderMarkers(list){
+  Object.values(markers).forEach(m=>map.removeLayer(m));
+  markers={};
+  list.forEach(v=>{
+    if(!+v.lat||!+v.lng) return;
+    const k=`${v.source}_${v.vehicle_id}`;
+    markers[k]=L.marker([v.lat,v.lng],{icon:mkIcon(cls(v))})
+      .bindPopup(`<b style="font-family:monospace">${v.plate||v.vehicle_id}</b><br><small>${v.address||''}</small><br>ความเร็ว: <b>${v.speed||0}</b> km/h`)
+      .addTo(map);
+  });
+}
+
+/* ═══════════════════════════════════════
+   CARD
+═══════════════════════════════════════ */
+const SRC_LABEL = {skytek:'S', geniustracks:'G', legacy:'L'};
+
+function cardHTML(v){
+  const c=cls(v), spd=+v.speed||0, pct=Math.min(spd/120*100,100);
+  const key=`${v.source}_${v.vehicle_id}`;
+  const badge=c==='mv'?`${spd} km/h`:c==='of'?'OFFLINE':'จอด';
+  const addr=(v.address||'').trim();
+  const time=(v.updated_at||'').slice(11,16);
+  const tag=`<span class="src-tag ${v.source}">${SRC_LABEL[v.source]||'?'}</span>`;
+  return `<div class="vcard ${c}" onclick="focusV('${key}')">
+    <div class="car-icon">${SVG[c]()}</div>
+    <div class="vbody">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px">
+        <div class="plate">${v.plate||v.vehicle_id}<span class="badge">${badge}</span></div>
+        ${tag}
+      </div>
+      ${addr?`<div class="addr">📍 ${addr}</div>`:'<div class="addr" style="color:#CBD5E1">ไม่มีข้อมูลที่อยู่</div>'}
+      <div class="spdrow">
+        <div class="spdbar"><div class="spdfil" style="width:${pct}%"></div></div>
+        <div class="spdnum">${spd} km/h</div>
+      </div>
+      ${time?`<div class="meta"><span style="margin-left:auto">🕐 ${time}</span></div>`:''}
+    </div>
+  </div>`;
+}
+
+/* ═══════════════════════════════════════
+   SIDEBAR RENDER
+═══════════════════════════════════════ */
+function renderSidebar(list){
+  const shown = filter==='all' ? list : list.filter(v=>cls(v)===filter);
+  const groups = { mv: shown.filter(v=>cls(v)==='mv'), st: shown.filter(v=>cls(v)==='st'), of: shown.filter(v=>cls(v)==='of') };
+  const labels  = { mv:['▶','วิ่งอยู่'], st:['■','จอด'], of:['○','ออฟไลน์'] };
+
+  document.getElementById('vlist').innerHTML = ['mv','st','of'].map(k=>{
+    const g=groups[k]; if(!g.length) return '';
+    const open=secOpen[k];
+    return `<div class="sec-hdr ${k}" onclick="toggleSec('${k}')">
+      <span>${labels[k][0]} ${labels[k][1]} (${g.length})</span>
+      <div class="ln"></div>
+      <span class="arr" id="ar-${k}">${open?'▼':'▶'}</span>
+    </div>
+    <div class="sec-body ${open?'':'shut'}" id="sb-${k}">
+      ${g.map(cardHTML).join('')}
+    </div>`;
+  }).join('');
+}
+
+function focusV(k){
+  if(markers[k]){ map.setView(markers[k].getLatLng(),14); markers[k].openPopup(); }
+  if(isMobile()) closeSidebar();
+}
+
+/* ═══════════════════════════════════════
+   STATS
+═══════════════════════════════════════ */
+function updateStats(list){
+  const b=s=>list.filter(v=>cls(v)===s).length;
+  const bs=s=>list.filter(v=>v.source===s).length;
+  document.getElementById('s-t').textContent=list.length;
+  document.getElementById('s-m').textContent=b('mv');
+  document.getElementById('s-s').textContent=b('st');
+  document.getElementById('s-o').textContent=b('of');
+  document.getElementById('p-sky').textContent=`SKY ${bs('skytek')}`;
+  document.getElementById('p-gen').textContent=`GEN ${bs('geniustracks')}`;
+  document.getElementById('p-leg').textContent=`LEG ${bs('legacy')}`;
+  document.getElementById('mm-m').textContent=b('mv');
+  document.getElementById('mm-s').textContent=b('st');
+  document.getElementById('mm-o').textContent=b('of');
+}
+
+/* ═══════════════════════════════════════
+   FILTER
+═══════════════════════════════════════ */
+function setFilter(f){
+  filter=f;
+  // header stat cards
+  const map2 = {all:'ht', mv:'hm', st:'hs', of:'ho'};
+  document.querySelectorAll('.hstat').forEach(el=>{
+    el.classList.toggle('active', Object.entries(map2).some(([k,c])=>k===f && el.classList.contains(c)));
+  });
+  renderSidebar(vehicles);
+  // open sidebar if collapsed/closed
+  const sb=document.getElementById('sidebar');
+  if(isMobile()&&!sb.classList.contains('drawer-open')){
+    sb.classList.add('drawer-open');
+    document.getElementById('overlay').style.display='block';
+  } else if(!isMobile()&&sb.classList.contains('mini')){
+    sb.classList.remove('mini');
+    setMapLeft(false);
+    setTimeout(()=>map.invalidateSize(),300);
+  }
+}
+/* ═══════════════════════════════════════
+   CLOCK
+═══════════════════════════════════════ */
+setInterval(()=>document.getElementById('clock').textContent=new Date().toLocaleTimeString('th-TH'),1000);
+
+/* ═══════════════════════════════════════
+   LOAD
+═══════════════════════════════════════ */
+async function loadData(){
+  const { data, error } = await sb.from('vehicles')
+    .select('*')
+    .order('source')
+    .order('name');
+  if (error) { console.error('Supabase error:', error); return; }
+  vehicles = data || [];
+  renderMarkers(vehicles);
+  renderSidebar(vehicles);
+  updateStats(vehicles);
+}
+loadData();
+setInterval(loadData,60000);
+
+/* close drawer when resize back to desktop */
+window.addEventListener('resize',()=>{
+  if(!isMobile()) closeSidebar();
+  map.invalidateSize();
+});
+</script>
+</body>
+</html>
