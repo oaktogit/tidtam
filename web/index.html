@@ -585,8 +585,9 @@ const SRC_LABEL = {skytek:'S', geniustracks:'G', legacy:'L'};
 
 function toThaiTime(iso){
   if(!iso) return '';
-  // updated_at from GHA is UTC but written as naive ISO (no Z) — append Z so Date treats it as UTC
-  const s = /[Z+\-]\d|[+\-]\d{2}:?\d{2}$/.test(iso) ? iso : iso + 'Z';
+  // updated_at from GHA is UTC but written as naive ISO (no Z) — append Z so Date treats it as UTC.
+  // Anchor to end so the dashes in YYYY-MM-DD don't get matched as a timezone offset.
+  const s = /(Z|[+\-]\d{2}:?\d{2})$/.test(iso) ? iso : iso + 'Z';
   const d = new Date(s);
   if(isNaN(d)) return '';
   return d.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Bangkok'});
@@ -712,7 +713,7 @@ function latestUpdatedAt(list){
   for (const v of list || []) {
     const s = v.updated_at;
     if (!s) continue;
-    const t = Date.parse(/[Z+\-]\d|[+\-]\d{2}:?\d{2}$/.test(s) ? s : s + 'Z');
+    const t = Date.parse(/(Z|[+\-]\d{2}:?\d{2})$/.test(s) ? s : s + 'Z');
     if (t > max) max = t;
   }
   return max;
