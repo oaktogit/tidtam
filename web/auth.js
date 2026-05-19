@@ -3,8 +3,16 @@ window.sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY)
 
 window.tidtamAuth = {
   async session() {
-    const { data } = await sb.auth.getSession();
-    return data.session;
+    // getUser() validates the token against Supabase (network call) instead of
+    // trusting whatever is in localStorage. If token is expired/revoked, sign
+    // out so a stale entry can't fool requireLogin into letting through.
+    const { data, error } = await sb.auth.getUser();
+    if (error || !data?.user) {
+      try { await sb.auth.signOut(); } catch (_) {}
+      return null;
+    }
+    const { data: s } = await sb.auth.getSession();
+    return s.session;
   },
 
   async profile() {
