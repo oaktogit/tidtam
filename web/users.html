@@ -13,7 +13,8 @@
       --text: #134E4A; --dim: #64748B;
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Kanit', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    body { font-family: 'Kanit', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; visibility: hidden; }
+    body.authed { visibility: visible; }
 
     header {
       background: var(--surface); border-bottom: 2px solid var(--teal-bd);
@@ -183,6 +184,7 @@ async function init() {
   const r = await tidtamAuth.requireAdmin();
   if (!r) return;
   me = r.profile;
+  document.body.classList.add('authed');
   await loadUsers();
 }
 

@@ -28,6 +28,9 @@
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Kanit', sans-serif; background: var(--bg); color: var(--text); }
+    /* hide UI until auth gate confirms session — prevents flashing dashboard before redirect */
+    body { visibility: hidden; }
+    body.authed { visibility: visible; }
 
     /* ── animations ── */
     @keyframes zFloat   { 0%{opacity:0;transform:translateY(0)scale(.7)} 25%{opacity:1} 100%{opacity:0;transform:translateY(-18px)scale(1.2)} }
@@ -343,14 +346,15 @@
 /* ═══════════════════════════════════════
    AUTH GATE — ต้อง login ก่อนใช้งาน
 ═══════════════════════════════════════ */
-(async () => {
+async function authGate() {
   const s = await tidtamAuth.requireLogin();
-  if (!s) return;
+  if (!s) return false;
   const p = await tidtamAuth.profile();
   if (p?.role === 'admin') {
     document.getElementById('user-link').style.display = 'inline-block';
   }
-})();
+  return true;
+}
 
 /* ═══════════════════════════════════════
    MAP
@@ -649,8 +653,15 @@ async function loadData(){
   renderSidebar(vehicles);
   updateStats(vehicles);
 }
-loadData();
-setInterval(loadData,60000);
+
+/* boot — only after auth gate passes; otherwise requireLogin() has already redirected to login.html */
+(async () => {
+  const ok = await authGate();
+  if (!ok) return;
+  document.body.classList.add('authed');
+  await loadData();
+  setInterval(loadData, 60000);
+})();
 
 /* close drawer when resize back to desktop */
 window.addEventListener('resize',()=>{
