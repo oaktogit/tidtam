@@ -22,8 +22,9 @@
       display: flex; align-items: center; gap: 12px; padding: 12px 18px;
       position: sticky; top: 0; z-index: 100;
     }
-    .logo { font-size: 1.05rem; font-weight: 700; color: var(--teal); }
-    .logo em { color: var(--salmon); font-style: normal; }
+    .logo { display: inline-flex; align-items: center; gap: 6px; color: var(--teal); }
+    .logo-svg { width: 36px; height: 21px; flex-shrink: 0; }
+    .logo-text { font-size: .95rem; font-weight: 500; letter-spacing: .3px; }
     .ttl { font-size: .95rem; color: var(--dim); margin-left: 4px; }
     .spacer { flex: 1; }
     .btn {
@@ -119,7 +120,23 @@
 <body>
 
 <header>
-  <a href="index.html" class="logo" style="text-decoration:none">🛰 Tid<em>tam</em></a>
+  <a href="index.html" class="logo" style="text-decoration:none">
+    <svg class="logo-svg" viewBox="0 0 140 82" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <rect x="6" y="12" width="72" height="48" rx="2" fill="#14B8A6"/>
+      <rect x="6" y="12" width="5" height="48" rx="1" fill="#0D9488"/>
+      <rect x="73" y="12" width="5" height="48" rx="1" fill="#0D9488"/>
+      <line x1="6" y1="36" x2="78" y2="36" stroke="#0D9488" stroke-width="2" opacity=".5"/>
+      <rect x="82" y="18" width="46" height="42" rx="10" fill="#0D9488"/>
+      <rect x="86" y="23" width="22" height="22" rx="5" fill="#BAE6FD" opacity=".9"/>
+      <circle cx="28" cy="68" r="11" fill="#1E293B"/><circle cx="28" cy="68" r="4" fill="#6B7280"/>
+      <circle cx="52" cy="68" r="11" fill="#1E293B"/><circle cx="52" cy="68" r="4" fill="#6B7280"/>
+      <circle cx="106" cy="68" r="13" fill="#1E293B"/><circle cx="106" cy="68" r="5" fill="#6B7280"/>
+      <path d="M88 30 Q91.5 28 95 30" stroke="#134E4A" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+      <path d="M97 30 Q100.5 28 104 30" stroke="#134E4A" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+      <path d="M89 37 Q92.5 40 96 37" stroke="#134E4A" stroke-width="1.7" fill="none" stroke-linecap="round"/>
+    </svg>
+    <span class="logo-text">tidtam</span>
+  </a>
   <span class="ttl">› จัดการผู้ใช้</span>
   <div class="spacer"></div>
   <a href="index.html" class="btn">← Dashboard</a>

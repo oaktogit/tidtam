@@ -68,8 +68,9 @@
       flex-shrink: 0;
     }
 
-    .logo { font-size: .95rem; font-weight: 700; color: var(--teal); white-space: nowrap; }
-    .logo em { color: var(--salmon); font-style: normal; }
+    .logo { display: flex; align-items: center; gap: 5px; flex-shrink: 0; white-space: nowrap; }
+    .logo-svg { width: 32px; height: 19px; flex-shrink: 0; }
+    .logo-text { font-size: .8rem; font-weight: 500; color: var(--teal); letter-spacing: .3px; }
 
     /* stats row — scrollable on small screens */
     .hstats {
@@ -100,7 +101,26 @@
     #clock { font-family:'Share Tech Mono',monospace; font-size:.72rem; color:var(--dim); flex-shrink:0; }
 
     @media(max-width:560px) { .schips{display:none} #clock{display:none} }
-    @media(max-width:380px) { .hstat .l{display:none} .hstat{padding:3px 7px} }
+    @media(max-width:480px) {
+      .hstat { padding: 2px 7px; }
+      .hstat .v { font-size: 1rem; }
+      .logo-svg { width: 28px; height: 17px; }
+      .logo-text { font-size: .75rem; }
+    }
+    @media(max-width:380px) {
+      .hstat .l{display:none}
+      .hstat{padding:2px 6px}
+      .hstat .v { font-size: .9rem; }
+      #hdr { padding: 0 8px; gap: 6px; }
+      .logo-text { display: none; }
+    }
+    @media(max-width:340px) {
+      .hstat{padding:1px 5px}
+      .hstat .v { font-size: .8rem; }
+      #menu-btn { width: 32px; height: 32px; }
+      .rbtn { padding: 3px 7px; font-size: .68rem; }
+      .hstats { gap: 3px; }
+    }
 
     /* ════════════════════════════
        BODY LAYOUT
@@ -292,7 +312,23 @@
 <!-- HEADER -->
 <div id="hdr">
   <button id="menu-btn" onclick="toggleSidebar()" title="เปิด/ปิดเมนู">☰</button>
-  <div class="logo">🛰 Tid<em>tam</em></div>
+  <div class="logo" title="tidtam">
+    <svg class="logo-svg" viewBox="0 0 140 82" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <rect x="6" y="12" width="72" height="48" rx="2" fill="#14B8A6"/>
+      <rect x="6" y="12" width="5" height="48" rx="1" fill="#0D9488"/>
+      <rect x="73" y="12" width="5" height="48" rx="1" fill="#0D9488"/>
+      <line x1="6" y1="36" x2="78" y2="36" stroke="#0D9488" stroke-width="2" opacity=".5"/>
+      <rect x="82" y="18" width="46" height="42" rx="10" fill="#0D9488"/>
+      <rect x="86" y="23" width="22" height="22" rx="5" fill="#BAE6FD" opacity=".9"/>
+      <circle cx="28" cy="68" r="11" fill="#1E293B"/><circle cx="28" cy="68" r="4" fill="#6B7280"/>
+      <circle cx="52" cy="68" r="11" fill="#1E293B"/><circle cx="52" cy="68" r="4" fill="#6B7280"/>
+      <circle cx="106" cy="68" r="13" fill="#1E293B"/><circle cx="106" cy="68" r="5" fill="#6B7280"/>
+      <path d="M88 30 Q91.5 28 95 30" stroke="#134E4A" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+      <path d="M97 30 Q100.5 28 104 30" stroke="#134E4A" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+      <path d="M89 37 Q92.5 40 96 37" stroke="#134E4A" stroke-width="1.7" fill="none" stroke-linecap="round"/>
+    </svg>
+    <span class="logo-text">tidtam</span>
+  </div>
   <div class="hstats">
     <div class="hstat ht active" onclick="setFilter('all')" title="แสดงทั้งหมด"><div class="v" id="s-t">0</div><div class="l">ทั้งหมด</div></div>
     <div class="hstat hm"        onclick="setFilter('mv')"  title="กรองเฉพาะรถวิ่ง"><div class="v" id="s-m">0</div><div class="l">วิ่ง</div></div>

@@ -22,8 +22,9 @@
       border-radius: 16px; padding: 32px 28px; width: 100%; max-width: 380px;
       box-shadow: 0 10px 40px rgba(13,148,136,.12);
     }
-    .logo { text-align: center; font-size: 1.6rem; font-weight: 700; color: var(--teal); margin-bottom: 4px; }
-    .logo em { color: var(--salmon); font-style: normal; }
+    .logo { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 4px; }
+    .logo-svg { width: 56px; height: 33px; flex-shrink: 0; }
+    .logo-text { font-size: 1.2rem; font-weight: 500; color: var(--teal); letter-spacing: .5px; }
     .sub { text-align: center; color: var(--dim); font-size: .85rem; margin-bottom: 24px; }
     label { display: block; font-size: .8rem; color: var(--dim); margin-bottom: 6px; margin-top: 14px; }
     input {
@@ -49,7 +50,23 @@
 <body>
 
 <form class="card" id="form">
-  <div class="logo">🛰 Tid<em>tam</em></div>
+  <div class="logo">
+    <svg class="logo-svg" viewBox="0 0 140 82" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <rect x="6" y="12" width="72" height="48" rx="2" fill="#14B8A6"/>
+      <rect x="6" y="12" width="5" height="48" rx="1" fill="#0D9488"/>
+      <rect x="73" y="12" width="5" height="48" rx="1" fill="#0D9488"/>
+      <line x1="6" y1="36" x2="78" y2="36" stroke="#0D9488" stroke-width="2" opacity=".5"/>
+      <rect x="82" y="18" width="46" height="42" rx="10" fill="#0D9488"/>
+      <rect x="86" y="23" width="22" height="22" rx="5" fill="#BAE6FD" opacity=".9"/>
+      <circle cx="28" cy="68" r="11" fill="#1E293B"/><circle cx="28" cy="68" r="4" fill="#6B7280"/>
+      <circle cx="52" cy="68" r="11" fill="#1E293B"/><circle cx="52" cy="68" r="4" fill="#6B7280"/>
+      <circle cx="106" cy="68" r="13" fill="#1E293B"/><circle cx="106" cy="68" r="5" fill="#6B7280"/>
+      <path d="M88 30 Q91.5 28 95 30" stroke="#134E4A" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+      <path d="M97 30 Q100.5 28 104 30" stroke="#134E4A" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+      <path d="M89 37 Q92.5 40 96 37" stroke="#134E4A" stroke-width="1.7" fill="none" stroke-linecap="round"/>
+    </svg>
+    <span class="logo-text">tidtam</span>
+  </div>
   <div class="sub">เข้าสู่ระบบเพื่อใช้งาน</div>
 
   <label for="email">อีเมล</label>
