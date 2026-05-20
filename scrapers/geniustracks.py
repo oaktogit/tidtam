@@ -85,6 +85,11 @@ class GeniusTracksScraper(BaseScraper):
             else:
                 status = "stopped"
 
+            try:
+                heading = float(d.get("car_rotation") or 0)
+            except (TypeError, ValueError):
+                heading = 0.0
+
             vehicles.append({
                 "vehicle_id": str(d.get("id")),
                 "name": d.get("name", ""),
@@ -94,6 +99,7 @@ class GeniusTracksScraper(BaseScraper):
                 "speed": speed,
                 "status": status,
                 "address": d.get("address", ""),
+                "heading": heading,
             })
 
         return vehicles

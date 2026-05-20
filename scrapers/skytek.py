@@ -110,6 +110,11 @@ class SkytekScraper(BaseScraper):
             except (TypeError, ValueError):
                 speed = 0.0
 
+            try:
+                heading = float(pos.get("Direction") or pos.get("Heading") or 0)
+            except (TypeError, ValueError):
+                heading = 0.0
+
             acc_on = (pos.get("AccStatus") or "").upper() == "ON"
             locate_ok = (pos.get("LocateStatus") or "").lower() == "locate"
 
@@ -133,6 +138,7 @@ class SkytekScraper(BaseScraper):
                 "speed": speed,
                 "status": status,
                 "address": address,
+                "heading": heading,
             })
 
         return vehicles
