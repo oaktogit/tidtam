@@ -37,8 +37,9 @@ class GeniusTracksScraper(BaseScraper):
 
         # wait for initial data load — explicit instead of fragile networkidle
         try:
-            await page.wait_for_response(
-                lambda r: "getRealTimeData" in r.url and r.status == 200,
+            await page.wait_for_event(
+                "response",
+                predicate=lambda r: "getRealTimeData" in r.url and r.status == 200,
                 timeout=20000,
             )
         except Exception as e:
@@ -53,13 +54,14 @@ class GeniusTracksScraper(BaseScraper):
                 await page.click("li:has-text('ทั้งหมด')", timeout=5000)
                 # รอ getRealTimeData ของ group change
                 try:
-                    await page.wait_for_response(
-                        lambda r: "getRealTimeData" in r.url and r.status == 200,
+                    await page.wait_for_event(
+                        "response",
+                        predicate=lambda r: "getRealTimeData" in r.url and r.status == 200,
                         timeout=10000,
                     )
                 except Exception:
                     pass
-                await page.wait_for_timeout(1500)
+                await page.wait_for_timeout(4000)  # buffer for slow getRealTimeData responses
             except Exception as e:
                 print(f"[geniustracks] dropdown attempt {attempt} failed: {e}")
 
