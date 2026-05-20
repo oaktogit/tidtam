@@ -284,6 +284,15 @@
     .addr { font-size:.63rem; color:var(--dim); margin-top:2px; margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.3; }
     .meta { display:flex; gap:5px; align-items:center; margin-top:4px; font-size:.58rem; color:var(--dim); }
 
+    .nav-link {
+      display:inline-flex; align-items:center; gap:3px;
+      padding:2px 7px; border-radius:6px;
+      background:var(--teal-lt); color:var(--teal); border:1px solid var(--teal-bd);
+      font-size:.6rem; font-weight:600; text-decoration:none;
+    }
+    .nav-link:hover { background:var(--teal); color:#fff; }
+    .vcard.of .nav-link { background:var(--bg); color:var(--gray); border-color:var(--border); }
+
     /* provider circular tag */
     .src-tag {
       display: inline-flex; align-items: center; justify-content: center;
@@ -344,6 +353,7 @@
 
     /* leaflet */
     .leaflet-popup-content-wrapper { border-radius:10px; font-family:'Kanit',sans-serif; font-size:13px; }
+    .truck-marker { background:transparent !important; border:none !important; }
   </style>
 </head>
 <body>
@@ -612,21 +622,72 @@ function toggleSec(k){
 /* ═══════════════════════════════════════
    MARKERS
 ═══════════════════════════════════════ */
-function mkIcon(c){
-  const col={mv:'#22C55E',st:'#F59E0B',of:'#9CA3AF'}[c];
-  const pulse = c==='mv' ? `<div class="mp" style="position:absolute;inset:0;border-radius:50%;background:${col}"></div>` : '';
-  return L.divIcon({className:'',
-    html:`<div style="position:relative;width:14px;height:14px">${pulse}<div style="position:absolute;inset:0;border-radius:50%;background:${col};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.2)"></div></div>`,
-    iconSize:[14,14],iconAnchor:[7,7]});
+/* mini top-down truck — front faces UP (north = heading 0°) */
+function truckMini(c){
+  const C = c==='mv' ? ['#0D9488','#14B8A6']
+        : c==='st' ? ['#D97706','#F59E0B']
+        :            ['#6B7280','#9CA3AF'];
+  return `<svg viewBox="0 0 28 44" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;display:block">
+    <ellipse cx="14" cy="42" rx="9" ry="2" fill="rgba(0,0,0,.22)"/>
+    <rect x="6"  y="14" width="16" height="22" rx="2" fill="${C[0]}"/>
+    <line x1="6" y1="22" x2="22" y2="22" stroke="${C[1]}" stroke-width="1" opacity=".7"/>
+    <line x1="6" y1="29" x2="22" y2="29" stroke="${C[1]}" stroke-width="1" opacity=".7"/>
+    <rect x="7"  y="2"  width="14" height="14" rx="3" fill="${C[1]}"/>
+    <rect x="9"  y="4"  width="10" height="4"  rx="1" fill="#BAE6FD"/>
+    <circle cx="10" cy="3" r="0.9" fill="#FEF08A"/>
+    <circle cx="18" cy="3" r="0.9" fill="#FEF08A"/>
+    <rect x="3"  y="15" width="3"  height="6"  rx="1" fill="#1E293B"/>
+    <rect x="22" y="15" width="3"  height="6"  rx="1" fill="#1E293B"/>
+    <rect x="3"  y="28" width="3"  height="6"  rx="1" fill="#1E293B"/>
+    <rect x="22" y="28" width="3"  height="6"  rx="1" fill="#1E293B"/>
+  </svg>`;
 }
+
+function mkIcon(c, heading){
+  const h = Number(heading) || 0;
+  const sz = 34;
+  const pulse = c==='mv'
+    ? `<div class="mp" style="position:absolute;inset:-6px;border-radius:50%;background:#22C55E"></div>`
+    : '';
+  return L.divIcon({
+    className:'truck-marker',
+    html:`<div style="position:relative;width:${sz}px;height:${sz}px">
+      ${pulse}
+      <div style="position:absolute;inset:0;transform:rotate(${h}deg);transform-origin:center;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))">${truckMini(c)}</div>
+    </div>`,
+    iconSize:[sz,sz],
+    iconAnchor:[sz/2, sz/2],
+    popupAnchor:[0, -sz/2]
+  });
+}
+
+function gmapsNav(lat,lng){
+  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+}
+
+function popupHTML(v){
+  const navUrl = gmapsNav(v.lat, v.lng);
+  const heading = Number(v.heading)||0;
+  const headTxt = (v.heading!=null && v.heading!=='') ? ` · ทิศ ${Math.round(heading)}°` : '';
+  return `<div style="min-width:170px">
+    <b style="font-family:'Share Tech Mono',monospace">${v.plate||v.vehicle_id}</b>
+    <div style="font-size:11px;color:#64748B;margin:3px 0">${v.address||''}</div>
+    <div style="font-size:12px">ความเร็ว: <b>${v.speed||0}</b> km/h${headTxt}</div>
+    <a href="${navUrl}" target="_blank" rel="noopener"
+       style="display:inline-block;margin-top:8px;padding:5px 10px;background:#0D9488;color:#fff;border-radius:6px;font-weight:600;text-decoration:none;font-size:12px">
+      🧭 นำทางด้วย Google Maps
+    </a>
+  </div>`;
+}
+
 function renderMarkers(list){
   Object.values(markers).forEach(m=>map.removeLayer(m));
   markers={};
   list.forEach(v=>{
     if(!+v.lat||!+v.lng) return;
     const k=`${v.source}_${v.vehicle_id}`;
-    markers[k]=L.marker([v.lat,v.lng],{icon:mkIcon(cls(v))})
-      .bindPopup(`<b style="font-family:monospace">${v.plate||v.vehicle_id}</b><br><small>${v.address||''}</small><br>ความเร็ว: <b>${v.speed||0}</b> km/h`)
+    markers[k]=L.marker([v.lat,v.lng],{icon:mkIcon(cls(v), v.heading)})
+      .bindPopup(popupHTML(v))
       .addTo(map);
   });
 }
@@ -653,6 +714,10 @@ function cardHTML(v){
   const addr=(v.address||'').trim();
   const time=toThaiTime(v.updated_at);
   const tag=`<span class="src-tag ${v.source}">${SRC_LABEL[v.source]||'?'}</span>`;
+  const navable = +v.lat && +v.lng;
+  const navHTML = navable
+    ? `<a class="nav-link" href="${gmapsNav(v.lat,v.lng)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="นำทางด้วย Google Maps">🧭 นำทาง</a>`
+    : '';
   return `<div class="vcard ${c}" onclick="focusV('${key}')">
     <div class="car-icon">${SVG[c]()}</div>
     <div class="vbody">
@@ -665,7 +730,10 @@ function cardHTML(v){
         <div class="spdbar"><div class="spdfil" style="width:${pct}%"></div></div>
         <div class="spdnum">${spd} km/h</div>
       </div>
-      ${time?`<div class="meta"><span style="margin-left:auto">🕐 ${time}</span></div>`:''}
+      <div class="meta">
+        ${navHTML}
+        ${time?`<span style="margin-left:auto">🕐 ${time}</span>`:'<span style="margin-left:auto"></span>'}
+      </div>
     </div>
   </div>`;
 }

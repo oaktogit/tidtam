@@ -53,8 +53,19 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_source_vehicle
         ON vehicles (source, vehicle_id)
     """)
-    if not DATABASE_URL:
-        # SQLite only: migrate legacy databases without these columns
+    # Additive migrations for tables that pre-date these columns.
+    # SQLite has no IF NOT EXISTS for ALTER, so we try/except.
+    # Postgres supports IF NOT EXISTS — safe to run every startup.
+    if DATABASE_URL:
+        for col_sql in (
+            "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS address TEXT",
+            "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS heading REAL",
+        ):
+            try:
+                _exec(conn, col_sql)
+            except Exception:
+                pass
+    else:
         for col_sql in (
             "ALTER TABLE vehicles ADD COLUMN address TEXT",
             "ALTER TABLE vehicles ADD COLUMN heading REAL",
