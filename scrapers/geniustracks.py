@@ -29,19 +29,44 @@ class GeniusTracksScraper(BaseScraper):
                 except Exception:
                     pass
 
-        page.on("response", handle_response)
-        await page.goto("https://track3.geniustracks.com/mapGenius")
-        await page.wait_for_load_state("networkidle")
-        await page.wait_for_timeout(3000)
+        def captured_count() -> int:
+            return len(captured.get("data", {}).get("data", []))
 
-        # คลิก dropdown กลุ่ม แล้วเลือก "ทั้งหมด"
+        page.on("response", handle_response)
+        await page.goto("https://track3.geniustracks.com/mapGenius", wait_until="domcontentloaded")
+
+        # wait for initial data load — explicit instead of fragile networkidle
         try:
-            await page.click(".select2-selection, [class*='group'] .select2, .select2-container", timeout=5000)
-            await page.wait_for_timeout(500)
-            await page.click("li:has-text('ทั้งหมด')", timeout=5000)
-            await page.wait_for_timeout(4000)  # รอ API โหลดรถใหม่ครบ
-        except Exception:
-            pass
+            await page.wait_for_response(
+                lambda r: "getRealTimeData" in r.url and r.status == 200,
+                timeout=20000,
+            )
+        except Exception as e:
+            print(f"[geniustracks] initial getRealTimeData wait timed out: {e}")
+        await page.wait_for_timeout(1000)  # let listener flush
+
+        # เลือก "ทั้งหมด" — retry สูงสุด 3 ครั้ง ถ้ายังจับข้อมูลไม่ได้
+        for attempt in range(1, 4):
+            try:
+                await page.click(".select2-selection, [class*='group'] .select2, .select2-container", timeout=5000)
+                await page.wait_for_timeout(400)
+                await page.click("li:has-text('ทั้งหมด')", timeout=5000)
+                # รอ getRealTimeData ของ group change
+                try:
+                    await page.wait_for_response(
+                        lambda r: "getRealTimeData" in r.url and r.status == 200,
+                        timeout=10000,
+                    )
+                except Exception:
+                    pass
+                await page.wait_for_timeout(1500)
+            except Exception as e:
+                print(f"[geniustracks] dropdown attempt {attempt} failed: {e}")
+
+            if captured_count() > 0:
+                print(f"[geniustracks] captured {captured_count()} vehicles on attempt {attempt}")
+                break
+            print(f"[geniustracks] attempt {attempt}: still 0 vehicles, retrying...")
 
         data = captured.get("data", {})
 

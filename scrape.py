@@ -4,7 +4,8 @@ Production entry point — รัน scrape ครั้งเดียวแล
 """
 import asyncio
 import os
-from db.database import init_db
+from db.database import init_db, get_known_addresses
+from scrapers.geocode import warm_cache_from
 from scrapers.skytek import SkytekScraper
 from scrapers.geniustracks import GeniusTracksScraper
 from scrapers.legacy import LegacyScraper
@@ -33,6 +34,8 @@ def build_scrapers():
 
 async def scrape_all():
     print("=== เริ่มดึงข้อมูล GPS ===")
+    warmed = warm_cache_from(get_known_addresses())
+    print(f"[geocode] warmed cache with {warmed} known addresses")
     scrapers = build_scrapers()
     await asyncio.gather(*[s.run() for s in scrapers])
     print("=== ดึงข้อมูลเสร็จ ===")
