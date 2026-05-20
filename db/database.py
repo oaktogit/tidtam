@@ -130,18 +130,3 @@ def get_all_vehicles():
         ).fetchall()]
     conn.close()
     return rows
-
-
-def get_known_addresses() -> list[tuple]:
-    """Return [(lat, lng, address), ...] for warming the geocode cache so
-    repeat positions skip Nominatim on the next scrape."""
-    conn = _get_conn()
-    sql = "SELECT lat, lng, address FROM vehicles WHERE address IS NOT NULL AND address != ''"
-    if DATABASE_URL:
-        cur = conn.cursor()
-        cur.execute(sql)
-        rows = cur.fetchall()
-    else:
-        rows = conn.execute(sql).fetchall()
-    conn.close()
-    return [(r[0], r[1], r[2]) for r in rows]
