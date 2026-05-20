@@ -44,6 +44,7 @@ def init_db():
             speed REAL,
             status TEXT,
             address TEXT,
+            heading REAL,
             updated_at TEXT NOT NULL,
             raw_data TEXT
         )
@@ -53,11 +54,15 @@ def init_db():
         ON vehicles (source, vehicle_id)
     """)
     if not DATABASE_URL:
-        # SQLite only: migrate legacy databases without address column
-        try:
-            conn.execute("ALTER TABLE vehicles ADD COLUMN address TEXT")
-        except Exception:
-            pass
+        # SQLite only: migrate legacy databases without these columns
+        for col_sql in (
+            "ALTER TABLE vehicles ADD COLUMN address TEXT",
+            "ALTER TABLE vehicles ADD COLUMN heading REAL",
+        ):
+            try:
+                conn.execute(col_sql)
+            except Exception:
+                pass
     conn.commit()
     conn.close()
 
@@ -73,26 +78,28 @@ def upsert_vehicle(source: str, vehicle_id: str, data: dict):
     if existing:
         _exec(conn, """
             UPDATE vehicles SET
-                name=?, plate=?, lat=?, lng=?, speed=?, status=?, address=?, updated_at=?, raw_data=?
+                name=?, plate=?, lat=?, lng=?, speed=?, status=?, address=?, heading=?, updated_at=?, raw_data=?
             WHERE source=? AND vehicle_id=?
         """, (
             data.get("name"), data.get("plate"),
             data.get("lat"), data.get("lng"),
             data.get("speed"), data.get("status"),
             data.get("address", ""),
+            data.get("heading"),
             now, str(data),
             source, vehicle_id
         ))
     else:
         _exec(conn, """
-            INSERT INTO vehicles (source, vehicle_id, name, plate, lat, lng, speed, status, address, updated_at, raw_data)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            INSERT INTO vehicles (source, vehicle_id, name, plate, lat, lng, speed, status, address, heading, updated_at, raw_data)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             source, vehicle_id,
             data.get("name"), data.get("plate"),
             data.get("lat"), data.get("lng"),
             data.get("speed"), data.get("status"),
             data.get("address", ""),
+            data.get("heading"),
             now, str(data)
         ))
     conn.commit()
