@@ -78,3 +78,15 @@ async def reverse_geocode(lat: float, lng: float) -> str:
         addr = ""
     _cache[key] = addr
     return addr
+
+
+def warm_cache_from(rows) -> int:
+    """Pre-populate _cache from an iterable of (lat, lng, address) tuples.
+    Saves serial Nominatim calls (rate-limited 1 req/s) for vehicles whose
+    rounded position hasn't moved since the previous scrape."""
+    n = 0
+    for lat, lng, addr in rows:
+        if lat and lng and addr:
+            _cache[(round(lat, 4), round(lng, 4))] = addr
+            n += 1
+    return n
