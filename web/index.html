@@ -895,9 +895,13 @@ function setGroupMode(mode){
         addUserMarker();
         updateStats(vehicles);
         renderSidebar(vehicles);
+        fitUserAndNearby();
       },
       () => { groupMode='status'; setGroupMode('status'); }
     );
+  } else if(mode==='location' && userPos){
+    // Re-snap map whenever user (re)picks location mode
+    fitUserAndNearby();
   }
   renderSidebar(vehicles);
 }
@@ -1012,6 +1016,8 @@ function setFilter(f){
     el.classList.toggle('active', Object.entries(map2).some(([k,c])=>k===f && el.classList.contains(c)));
   });
   renderSidebar(vehicles);
+  // GPS-first: picking "ใกล้" recenters the map to user + nearby
+  if(f==='near' && userPos) fitUserAndNearby();
   // open sidebar if collapsed/closed
   const sb=document.getElementById('sidebar');
   if(isMobile()&&!sb.classList.contains('drawer-open')){
