@@ -684,18 +684,18 @@ function getUserPosOnce(timeoutMs=2500){
   });
 }
 
-// Default view (boot): zoom in on user + N nearest vehicles. Fallback to whole fleet.
+// Default view (boot): zoom in on user + N nearest vehicles (by v._km,
+// which may be haversine or road distance depending on OSRM state).
 function fitUserAndNearby(n=3){
   if(!userPos){ fitFleet(); return; }
   const userLL = [userPos.lat, userPos.lng];
-  const vlls = Object.values(markers).map(m=>m.getLatLng()).filter(ll=>ll.lat&&ll.lng);
-  if(!vlls.length){ map.setView(userLL, 15); return; }
-  const nearest = vlls
-    .map(ll=>({ll, d:haversine(userPos.lat, userPos.lng, ll.lat, ll.lng)}))
-    .sort((a,b)=>a.d-b.d)
+  const nearby = vehicles
+    .filter(v => +v.lat && +v.lng && v._km !== undefined && isFinite(v._km))
+    .sort((a,b) => a._km - b._km)
     .slice(0, n)
-    .map(x=>x.ll);
-  map.fitBounds(L.latLngBounds([userLL, ...nearest]), {padding:[60,60], maxZoom:15});
+    .map(v => [+v.lat, +v.lng]);
+  if(!nearby.length){ map.setView(userLL, 15); return; }
+  map.fitBounds(L.latLngBounds([userLL, ...nearby]), {padding:[60,60], maxZoom:15});
 }
 
 document.getElementById('logo').addEventListener('click', fitFleet);
@@ -801,6 +801,77 @@ function haversine(lat1,lng1,lat2,lng2){
   return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
 }
 
+/* ═══════════════════════════════════════
+   ROAD DISTANCE via OSRM (public demo)
+   Demo server is rate-limited and "not for production" — fine for our
+   scale, but consider self-hosting OSRM or Mapbox if traffic grows.
+═══════════════════════════════════════ */
+const OSRM_TABLE_URL = 'https://router.project-osrm.org/table/v1/driving';
+const _roadDistCache = new Map();
+let _osrmInFlight = false;
+
+function _roadCacheKey(u, lat, lng){
+  return `${u.lat.toFixed(3)},${u.lng.toFixed(3)}|${lat.toFixed(3)},${lng.toFixed(3)}`;
+}
+
+// Fast haversine baseline on v._km so render/filter/group don't have to
+// recompute. Idempotent; called before each render that needs distance.
+function computeDistances(){
+  if(!userPos){ vehicles.forEach(v => { delete v._km; }); return; }
+  vehicles.forEach(v => {
+    v._km = (+v.lat && +v.lng)
+      ? haversine(userPos.lat, userPos.lng, +v.lat, +v.lng)
+      : Infinity;
+  });
+}
+
+// Upgrade v._km from straight-line to OSRM driving distance. One batch
+// /table call covers the whole fleet; rounded (lat,lng) pairs are
+// cached so subsequent refreshes only fetch vehicles that moved.
+async function upgradeToRoadDistances(){
+  if(!userPos || _osrmInFlight) return false;
+  const valid = vehicles.filter(v => +v.lat && +v.lng);
+  if(!valid.length) return false;
+
+  const uncached = [];
+  for(const v of valid){
+    const k = _roadCacheKey(userPos, +v.lat, +v.lng);
+    if(_roadDistCache.has(k)) v._km = _roadDistCache.get(k);
+    else uncached.push(v);
+  }
+  if(!uncached.length) return true;
+
+  _osrmInFlight = true;
+  try {
+    const coords = [
+      `${userPos.lng},${userPos.lat}`,
+      ...uncached.map(v => `${+v.lng},${+v.lat}`)
+    ].join(';');
+    const dests = uncached.map((_, i) => i + 1).join(';');
+    const url = `${OSRM_TABLE_URL}/${coords}?sources=0&destinations=${dests}&annotations=distance`;
+    const r = await fetch(url);
+    if(!r.ok) return false;
+    const j = await r.json();
+    const ds = j.distances && j.distances[0];
+    if(!ds) return false;
+    uncached.forEach((v, i) => {
+      const m = ds[i];
+      if(m != null){
+        const km = m / 1000;
+        v._km = km;
+        _roadDistCache.set(_roadCacheKey(userPos, +v.lat, +v.lng), km);
+      }
+      // m == null → no route → keep haversine fallback
+    });
+    return true;
+  } catch(e){
+    console.warn('OSRM road distance fetch failed:', e.message);
+    return false;
+  } finally {
+    _osrmInFlight = false;
+  }
+}
+
 function popupHTML(v){
   const navUrl = gmapsNav(v.lat, v.lng);
   const heading = Number(v.heading)||0;
@@ -893,9 +964,13 @@ function setGroupMode(mode){
       p => {
         userPos={lat:p.coords.latitude, lng:p.coords.longitude};
         addUserMarker();
+        computeDistances();                 // first time computing for these vehicles
         updateStats(vehicles);
         renderSidebar(vehicles);
         fitUserAndNearby();
+        upgradeToRoadDistances().then(ok => {
+          if (ok) { renderSidebar(vehicles); updateStats(vehicles); }
+        });
       },
       () => { groupMode='status'; setGroupMode('status'); }
     );
@@ -916,9 +991,9 @@ function renderSidebarByLocation(list){
       '<div style="padding:28px 16px;text-align:center;color:var(--dim);font-size:.82rem">กำลังขอตำแหน่ง GPS…</div>';
     return;
   }
-  const withDist = shown
-    .map(v=>({...v, _km:(+v.lat&&+v.lng)?haversine(userPos.lat,userPos.lng,+v.lat,+v.lng):Infinity}))
-    .sort((a,b)=>a._km-b._km);
+  // v._km is computed by computeDistances() / upgradeToRoadDistances() on
+  // the source vehicles array, so we just sort+group here.
+  const withDist = shown.slice().sort((a,b)=>(a._km ?? Infinity)-(b._km ?? Infinity));
   const locGroups=[
     {key:'ln',cls:'mv',label:'📍 ใกล้ฉัน',sub:'< 5 กม.',  list:withDist.filter(v=>v._km<5)},
     {key:'lm',cls:'mv',label:'🗺 ในพื้นที่',sub:'5–50 กม.',list:withDist.filter(v=>v._km>=5&&v._km<50)},
@@ -975,9 +1050,8 @@ function applyFilter(list){
   if(!userPos) return [];
   return list.filter(v => {
     if(cls(v)==='of') return false;
-    if(!+v.lat || !+v.lng) return false;
-    const d = haversine(userPos.lat, userPos.lng, +v.lat, +v.lng);
-    return filter==='near' ? d <= 50 : d > 50;
+    if(v._km === undefined || !isFinite(v._km)) return false;
+    return filter==='near' ? v._km <= 50 : v._km > 50;
   });
 }
 
@@ -987,9 +1061,8 @@ function updateStats(list){
   if(userPos){
     for(const v of list){
       if(cls(v)==='of') continue;
-      if(!+v.lat || !+v.lng) continue;
-      const d = haversine(userPos.lat, userPos.lng, +v.lat, +v.lng);
-      if(d <= 50) nearCount++; else farCount++;
+      if(v._km === undefined || !isFinite(v._km)) continue;
+      if(v._km <= 50) nearCount++; else farCount++;
     }
   }
   const bs=s=>list.filter(v=>v.source===s).length;
@@ -1044,9 +1117,16 @@ async function loadData(){
     .order('name');
   if (error) { console.error('Supabase error:', error); return; }
   vehicles = data || [];
+  computeDistances();                       // haversine baseline on v._km
   renderMarkers(vehicles);
   renderSidebar(vehicles);
   updateStats(vehicles);
+  // Upgrade to OSRM road distance in background; re-render when ready.
+  if (userPos) {
+    upgradeToRoadDistances().then(ok => {
+      if (ok) { renderSidebar(vehicles); updateStats(vehicles); }
+    });
+  }
   if(firstLoad){
     firstLoad=false;
     // GPS-first: snap to user+nearby on every fresh load when location is known,
