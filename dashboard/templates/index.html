@@ -424,10 +424,10 @@
     <span class="logo-text"><span class="lg">TID</span><span class="lp">TAM</span></span>
   </div>
   <div class="hstats">
-    <div class="hstat ht active" onclick="setFilter('all')" title="แสดงทั้งหมด"><div class="v" id="s-t">0</div><div class="l">ทั้งหมด</div></div>
-    <div class="hstat hm"        onclick="setFilter('mv')"  title="กรองเฉพาะรถวิ่ง"><div class="v" id="s-m">0</div><div class="l">วิ่ง</div></div>
-    <div class="hstat hs"        onclick="setFilter('st')"  title="กรองเฉพาะรถจอด"><div class="v" id="s-s">0</div><div class="l">จอด</div></div>
-    <div class="hstat ho"        onclick="setFilter('of')"  title="กรองเฉพาะออฟไลน์"><div class="v" id="s-o">0</div><div class="l">ออฟไลน์</div></div>
+    <div class="hstat ht active" onclick="setFilter('all')"  title="แสดงทั้งหมด"><div class="v" id="s-t">0</div><div class="l">ทั้งหมด</div></div>
+    <div class="hstat hm"        onclick="setFilter('near')" title="ใกล้ฉัน (≤ 50 กม.)"><div class="v" id="s-n">0</div><div class="l">ใกล้</div></div>
+    <div class="hstat hs"        onclick="setFilter('far')"  title="ไกล (> 50 กม.)"><div class="v" id="s-f">0</div><div class="l">ไกล</div></div>
+    <div class="hstat ho"        onclick="setFilter('off')"  title="ออฟไลน์"><div class="v" id="s-o">0</div><div class="l">ออฟไลน์</div></div>
   </div>
   <button id="refresh-btn" class="rbtn" onclick="refreshLocal()" title="รีเฟรช">
     <span class="r-idle">↻</span>
@@ -451,9 +451,9 @@
 
     <!-- mini strip (desktop collapsed) -->
     <div id="sb-mini">
-      <div class="mstat mv" onclick="expandTo('mv')" title="วิ่ง"><span id="mm-m">0</span></div>
-      <div class="mstat st" onclick="expandTo('st')" title="จอด"><span id="mm-s">0</span></div>
-      <div class="mstat of" onclick="expandTo('of')" title="ออฟไลน์"><span id="mm-o">0</span></div>
+      <div class="mstat mv" onclick="expandTo('near')" title="ใกล้"><span id="mm-n">0</span></div>
+      <div class="mstat st" onclick="expandTo('far')"  title="ไกล"><span id="mm-f">0</span></div>
+      <div class="mstat of" onclick="expandTo('off')"  title="ออฟไลน์"><span id="mm-o">0</span></div>
     </div>
 
     <!-- full content -->
@@ -623,9 +623,14 @@ function addUserMarker(){
       html: '<div class="user-pulse-ring"></div><div class="user-dot"></div>',
       iconSize: [18,18], iconAnchor: [9,9]
     }),
-    zIndexOffset: 1000,
-    interactive: false
-  }).addTo(map);
+    zIndexOffset: 1000
+  })
+    .bindTooltip('คุณอยู่ที่นี่', {direction:'top', offset:[0,-8]})
+    .on('click', () => {
+      const z = Math.min(Math.max(map.getZoom()+1, 15), 17);
+      map.flyTo([userPos.lat, userPos.lng], z, {duration:.6});
+    })
+    .addTo(map);
   if(navigator.geolocation){
     navigator.geolocation.watchPosition(
       p => {
@@ -858,6 +863,7 @@ function setGroupMode(mode){
       p => {
         userPos={lat:p.coords.latitude, lng:p.coords.longitude};
         addUserMarker();
+        updateStats(vehicles);
         renderSidebar(vehicles);
       },
       () => { groupMode='status'; setGroupMode('status'); }
@@ -870,7 +876,7 @@ function setGroupMode(mode){
    SIDEBAR RENDER
 ═══════════════════════════════════════ */
 function renderSidebarByLocation(list){
-  const shown = filter==='all' ? list : list.filter(v=>cls(v)===filter);
+  const shown = applyFilter(list);
   if(!userPos){
     document.getElementById('vlist').innerHTML=
       '<div style="padding:28px 16px;text-align:center;color:var(--dim);font-size:.82rem">กำลังขอตำแหน่ง GPS…</div>';
@@ -881,8 +887,8 @@ function renderSidebarByLocation(list){
     .sort((a,b)=>a._km-b._km);
   const locGroups=[
     {key:'ln',cls:'mv',label:'📍 ใกล้ฉัน',sub:'< 5 กม.',  list:withDist.filter(v=>v._km<5)},
-    {key:'lm',cls:'st',label:'🗺 ในพื้นที่',sub:'5–50 กม.',list:withDist.filter(v=>v._km>=5&&v._km<50)},
-    {key:'lf',cls:'of',label:'🌏 ไกล',     sub:'> 50 กม.',list:withDist.filter(v=>v._km>=50)},
+    {key:'lm',cls:'mv',label:'🗺 ในพื้นที่',sub:'5–50 กม.',list:withDist.filter(v=>v._km>=5&&v._km<50)},
+    {key:'lf',cls:'st',label:'🌏 ไกล',     sub:'> 50 กม.',list:withDist.filter(v=>v._km>=50)},
   ];
   document.getElementById('vlist').innerHTML = locGroups.map(g=>{
     if(!g.list.length) return '';
@@ -901,7 +907,7 @@ function renderSidebarByLocation(list){
 
 function renderSidebar(list){
   if(groupMode==='location'){ renderSidebarByLocation(list); return; }
-  const shown = filter==='all' ? list : list.filter(v=>cls(v)===filter);
+  const shown = applyFilter(list);
   const groups = { mv: shown.filter(v=>cls(v)==='mv'), st: shown.filter(v=>cls(v)==='st'), of: shown.filter(v=>cls(v)==='of') };
   const labels  = { mv:['▶','วิ่งอยู่'], st:['■','จอด'], of:['○','ออฟไลน์'] };
 
@@ -927,19 +933,42 @@ function focusV(k){
 /* ═══════════════════════════════════════
    STATS
 ═══════════════════════════════════════ */
+// Location-first filter: near = online ≤50km, far = online >50km, off = offline.
+// If no userPos, near/far return [] (counts show 0 to nudge GPS opt-in).
+function applyFilter(list){
+  if(filter==='all') return list;
+  if(filter==='off') return list.filter(v=>cls(v)==='of');
+  if(!userPos) return [];
+  return list.filter(v => {
+    if(cls(v)==='of') return false;
+    if(!+v.lat || !+v.lng) return false;
+    const d = haversine(userPos.lat, userPos.lng, +v.lat, +v.lng);
+    return filter==='near' ? d <= 50 : d > 50;
+  });
+}
+
 function updateStats(list){
-  const b=s=>list.filter(v=>cls(v)===s).length;
+  const offCount = list.filter(v=>cls(v)==='of').length;
+  let nearCount = 0, farCount = 0;
+  if(userPos){
+    for(const v of list){
+      if(cls(v)==='of') continue;
+      if(!+v.lat || !+v.lng) continue;
+      const d = haversine(userPos.lat, userPos.lng, +v.lat, +v.lng);
+      if(d <= 50) nearCount++; else farCount++;
+    }
+  }
   const bs=s=>list.filter(v=>v.source===s).length;
   document.getElementById('s-t').textContent=list.length;
-  document.getElementById('s-m').textContent=b('mv');
-  document.getElementById('s-s').textContent=b('st');
-  document.getElementById('s-o').textContent=b('of');
+  document.getElementById('s-n').textContent=nearCount;
+  document.getElementById('s-f').textContent=farCount;
+  document.getElementById('s-o').textContent=offCount;
   document.getElementById('p-sky').textContent=`SKY ${bs('skytek')}`;
   document.getElementById('p-gen').textContent=`GEN ${bs('geniustracks')}`;
   document.getElementById('p-leg').textContent=`LEG ${bs('legacy')}`;
-  document.getElementById('mm-m').textContent=b('mv');
-  document.getElementById('mm-s').textContent=b('st');
-  document.getElementById('mm-o').textContent=b('of');
+  document.getElementById('mm-n').textContent=nearCount;
+  document.getElementById('mm-f').textContent=farCount;
+  document.getElementById('mm-o').textContent=offCount;
 }
 
 /* ═══════════════════════════════════════
@@ -948,7 +977,7 @@ function updateStats(list){
 function setFilter(f){
   filter=f;
   // header stat cards
-  const map2 = {all:'ht', mv:'hm', st:'hs', of:'ho'};
+  const map2 = {all:'ht', near:'hm', far:'hs', off:'ho'};
   document.querySelectorAll('.hstat').forEach(el=>{
     el.classList.toggle('active', Object.entries(map2).some(([k,c])=>k===f && el.classList.contains(c)));
   });
@@ -978,7 +1007,13 @@ async function loadData(){
   renderMarkers(vehicles);
   renderSidebar(vehicles);
   updateStats(vehicles);
-  if(firstLoad){ firstLoad=false; if(!_savedView) { userPos ? fitUserAndNearby() : fitFleet(); } }
+  if(firstLoad){
+    firstLoad=false;
+    // GPS-first: snap to user+nearby on every fresh load when location is known,
+    // overriding any persisted view. Saved view is the fallback when GPS is denied.
+    if(userPos)            fitUserAndNearby();
+    else if(!_savedView)   fitFleet();
+  }
 }
 
 async function refreshLocal(){
