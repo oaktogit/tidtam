@@ -926,7 +926,7 @@ function renderSidebarByLocation(list){
   ];
   document.getElementById('vlist').innerHTML = locGroups.map(g=>{
     if(!g.list.length) return '';
-    if(secOpen[g.key]===undefined) secOpen[g.key] = g.key!=='lf';
+    if(secOpen[g.key]===undefined) secOpen[g.key] = true;
     const open=secOpen[g.key];
     return `<div class="sec-hdr ${g.cls}" onclick="toggleSec('${g.key}')">
       <span>${g.label} <small style="font-weight:400;opacity:.65">${g.sub}</small> (${g.list.length})</span>
