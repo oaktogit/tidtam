@@ -459,8 +459,8 @@
     <!-- full content -->
     <div id="sb-inner">
       <div id="group-toggle">
-        <button class="gm-btn active" id="gm-status"   onclick="setGroupMode('status')">สถานะ</button>
-        <button class="gm-btn"        id="gm-location" onclick="setGroupMode('location')">ระยะห่าง</button>
+        <button class="gm-btn"        id="gm-status"   onclick="setGroupMode('status')">สถานะ</button>
+        <button class="gm-btn active" id="gm-location" onclick="setGroupMode('location')">ใกล้ฉัน</button>
       </div>
       <div id="vlist"></div>
     </div>
@@ -603,7 +603,7 @@ const SVG = {
    STATE
 ═══════════════════════════════════════ */
 let vehicles=[], markers={}, filter='all', firstLoad=true;
-let groupMode='status', userPos=null;
+let groupMode='location', userPos=null;
 const secOpen = {mv:true, st:true, of:false};
 
 function fitFleet(){
@@ -650,17 +650,17 @@ function getUserPosOnce(timeoutMs=2500){
   });
 }
 
-function fitUserAndNearby(n=6){
+function fitUserAndNearby(n=3){
   if(!userPos){ fitFleet(); return; }
   const userLL = [userPos.lat, userPos.lng];
   const vlls = Object.values(markers).map(m=>m.getLatLng()).filter(ll=>ll.lat&&ll.lng);
-  if(!vlls.length){ map.setView(userLL, 14); return; }
+  if(!vlls.length){ map.setView(userLL, 15); return; }
   const nearest = vlls
     .map(ll=>({ll, d:haversine(userPos.lat, userPos.lng, ll.lat, ll.lng)}))
     .sort((a,b)=>a.d-b.d)
     .slice(0, n)
     .map(x=>x.ll);
-  map.fitBounds(L.latLngBounds([userLL, ...nearest]), {padding:[50,50], maxZoom:14});
+  map.fitBounds(L.latLngBounds([userLL, ...nearest]), {padding:[60,60], maxZoom:15});
 }
 
 document.getElementById('logo').addEventListener('click', fitFleet);
@@ -801,11 +801,13 @@ function renderMarkers(list){
 const SRC_LABEL = {skytek:'S', geniustracks:'G', legacy:'L'};
 
 function toThaiTime(iso){
+  // Localhost SQLite stores Bangkok-naive ISO (datetime.now() on a Bangkok box).
+  // Do NOT append 'Z' — that would treat it as UTC and shift +7h. The web file
+  // does append 'Z' because it reads UTC-naive rows written by GHA.
   if(!iso) return '';
-  const s = /(Z|[+\-]\d{2}:?\d{2})$/.test(iso) ? iso : iso + 'Z';
-  const d = new Date(s);
+  const d = new Date(iso);
   if(isNaN(d)) return '';
-  return d.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Bangkok'});
+  return d.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
 }
 
 function cardHTML(v){
@@ -1034,7 +1036,14 @@ function initPullToRefresh(){
   // Quick race: get user position before first fitBounds so default view
   // centers on user + nearest vehicles instead of the whole fleet.
   userPos = await getUserPosOnce();
-  if (userPos) addUserMarker();
+  if (userPos) {
+    addUserMarker();
+  } else {
+    // Geolocation denied/unavailable — flip sidebar default back to status mode
+    groupMode = 'status';
+    document.getElementById('gm-status').classList.add('active');
+    document.getElementById('gm-location').classList.remove('active');
+  }
   await loadData();
   setInterval(loadData, 60000);
 })();

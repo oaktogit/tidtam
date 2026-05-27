@@ -473,8 +473,8 @@
     <!-- full content -->
     <div id="sb-inner">
       <div id="group-toggle">
-        <button class="gm-btn active" id="gm-status"   onclick="setGroupMode('status')">สถานะ</button>
-        <button class="gm-btn"        id="gm-location" onclick="setGroupMode('location')">ระยะห่าง</button>
+        <button class="gm-btn"        id="gm-status"   onclick="setGroupMode('status')">สถานะ</button>
+        <button class="gm-btn active" id="gm-location" onclick="setGroupMode('location')">ใกล้ฉัน</button>
       </div>
       <div id="vlist"></div>
     </div>
@@ -633,7 +633,7 @@ const SVG = {
    STATE
 ═══════════════════════════════════════ */
 let vehicles=[], markers={}, filter='all', firstLoad=true;
-let groupMode='status', userPos=null;
+let groupMode='location', userPos=null;
 
 function fitFleet(){
   const pts = Object.values(markers).map(m=>m.getLatLng()).filter(ll=>ll.lat&&ll.lng);
@@ -679,18 +679,18 @@ function getUserPosOnce(timeoutMs=2500){
   });
 }
 
-// Default view (boot): center on user + N nearest vehicles. Fallback to whole fleet.
-function fitUserAndNearby(n=6){
+// Default view (boot): zoom in on user + N nearest vehicles. Fallback to whole fleet.
+function fitUserAndNearby(n=3){
   if(!userPos){ fitFleet(); return; }
   const userLL = [userPos.lat, userPos.lng];
   const vlls = Object.values(markers).map(m=>m.getLatLng()).filter(ll=>ll.lat&&ll.lng);
-  if(!vlls.length){ map.setView(userLL, 14); return; }
+  if(!vlls.length){ map.setView(userLL, 15); return; }
   const nearest = vlls
     .map(ll=>({ll, d:haversine(userPos.lat, userPos.lng, ll.lat, ll.lng)}))
     .sort((a,b)=>a.d-b.d)
     .slice(0, n)
     .map(x=>x.ll);
-  map.fitBounds(L.latLngBounds([userLL, ...nearest]), {padding:[50,50], maxZoom:14});
+  map.fitBounds(L.latLngBounds([userLL, ...nearest]), {padding:[60,60], maxZoom:15});
 }
 
 document.getElementById('logo').addEventListener('click', fitFleet);
@@ -1129,7 +1129,14 @@ function initPullToRefresh(){
   // Quick race: get user position before first fitBounds so default view
   // centers on user + nearest vehicles instead of the whole fleet.
   userPos = await getUserPosOnce();
-  if (userPos) addUserMarker();
+  if (userPos) {
+    addUserMarker();
+  } else {
+    // Geolocation denied/unavailable — flip sidebar default back to status mode
+    groupMode = 'status';
+    document.getElementById('gm-status').classList.add('active');
+    document.getElementById('gm-location').classList.remove('active');
+  }
   await loadData();
   // auto-trigger a fresh scrape if newest row is older than 5 min
   const ageMs = Date.now() - latestUpdatedAt(vehicles);
