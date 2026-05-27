@@ -843,19 +843,31 @@ async function upgradeToRoadDistances(){
 }
 
 function popupHTML(v){
-  const lat = v.lat, lng = v.lng;
-  const navUrl = gmapsNav(lat,lng);
-  const heading = Number(v.heading)||0;
-  const headTxt = (v.heading!=null && v.heading!=='') ? ` · ทิศ ${Math.round(heading)}°` : '';
+  const navUrl = gmapsNav(v.lat, v.lng);
+  const km = v._km;
+  const distHTML = (km !== undefined && isFinite(km))
+    ? `<div style="font-size:12px;color:#0D9488;margin-top:3px">🛣 ห่างจากคุณ <b>${km<1?Math.round(km*1000)+' ม.':km.toFixed(1)+' กม.'}</b></div>`
+    : '';
   return `<div style="min-width:170px">
     <b style="font-family:'Share Tech Mono',monospace">${v.plate||v.vehicle_id}</b>
     <div style="font-size:11px;color:#64748B;margin:3px 0">${v.address||''}</div>
-    <div style="font-size:12px">ความเร็ว: <b>${v.speed||0}</b> km/h${headTxt}</div>
+    <div style="font-size:12px">ความเร็ว: <b>${v.speed||0}</b> km/h</div>
+    ${distHTML}
     <a href="${navUrl}" target="_blank" rel="noopener"
        style="display:inline-block;margin-top:8px;padding:5px 10px;background:#0D9488;color:#fff;border-radius:6px;font-weight:600;text-decoration:none;font-size:12px">
       🧭 นำทางด้วย Google Maps
     </a>
   </div>`;
+}
+
+// Update popup HTML in place so v._km changes (haversine → road distance)
+// flow through to open popups without re-creating markers (which would
+// close any popup the user has open).
+function refreshMarkerPopups(){
+  for(const v of vehicles){
+    const key = `${v.source}_${v.vehicle_id}`;
+    if(markers[key]) markers[key].setPopupContent(popupHTML(v));
+  }
 }
 
 function renderMarkers(list){
@@ -940,7 +952,7 @@ function setGroupMode(mode){
         renderSidebar(vehicles);
         fitUserAndNearby();
         upgradeToRoadDistances().then(ok => {
-          if (ok) { renderSidebar(vehicles); updateStats(vehicles); }
+          if (ok) { refreshMarkerPopups(); renderSidebar(vehicles); updateStats(vehicles); }
         });
       },
       () => { groupMode='status'; setGroupMode('status'); }
@@ -1060,8 +1072,11 @@ function setFilter(f){
     el.classList.toggle('active', Object.entries(map2).some(([k,c])=>k===f && el.classList.contains(c)));
   });
   renderSidebar(vehicles);
-  // GPS-first: picking "ใกล้" recenters the map to user + nearby
-  if(f==='near' && userPos) fitUserAndNearby();
+  // Map response to the filter pick:
+  //   ทั้งหมด → fit the whole fleet (same as clicking the logo)
+  //   ใกล้    → snap to user + nearest (GPS-first)
+  if(f==='all')                fitFleet();
+  else if(f==='near' && userPos) fitUserAndNearby();
   // open sidebar if collapsed/closed
   const sb=document.getElementById('sidebar');
   if(isMobile()&&!sb.classList.contains('drawer-open')){
@@ -1091,7 +1106,7 @@ async function loadData(){
   // Upgrade to OSRM road distance in background; re-render when ready.
   if (userPos) {
     upgradeToRoadDistances().then(ok => {
-      if (ok) { renderSidebar(vehicles); updateStats(vehicles); }
+      if (ok) { refreshMarkerPopups(); renderSidebar(vehicles); updateStats(vehicles); }
     });
   }
   if(firstLoad){
