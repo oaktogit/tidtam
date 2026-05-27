@@ -46,6 +46,7 @@
 
     @keyframes driveJiggle { 0%,100%{transform:translate(0,0)} 25%{transform:translate(-.6px,.4px)} 50%{transform:translate(0,-.5px)} 75%{transform:translate(.6px,.4px)} }
     @keyframes dustFloat   { 0%,100%{opacity:.25;transform:translateY(0) scale(.7)} 50%{opacity:1;transform:translateY(-3px) scale(1.1)} }
+    @keyframes userPulse   { 0%{transform:scale(.7);opacity:.9} 100%{transform:scale(2.6);opacity:0} }
 
     .z1{animation:zFloat 2.2s ease-in-out 0s infinite}
     .z2{animation:zFloat 2.2s ease-in-out .7s infinite}
@@ -360,6 +361,19 @@
     .leaflet-popup-content-wrapper { border-radius:10px; font-family:'Kanit',sans-serif; font-size:13px; }
     .truck-marker { background:transparent !important; border:none !important; }
 
+    /* user-location marker — pulsing blue dot, click-through to map for tap-to-zoom */
+    .user-marker { background:transparent !important; border:none !important; }
+    .user-pulse-ring {
+      position:absolute; inset:-10px; border-radius:50%;
+      background:rgba(59,130,246,.25);
+      animation: userPulse 2s ease-out infinite;
+    }
+    .user-dot {
+      position:absolute; inset:0; border-radius:50%;
+      background:#3B82F6; border:3px solid #fff;
+      box-shadow:0 2px 6px rgba(0,0,0,.35);
+    }
+
     /* ── group mode toggle ── */
     #group-toggle {
       display: flex; gap: 4px; padding: 8px 8px 4px;
@@ -497,7 +511,7 @@ async function authGate() {
    MAP
 ═══════════════════════════════════════ */
 const _savedView = (() => { try { const s = localStorage.getItem('tidtam_mv'); return s ? JSON.parse(s) : null; } catch{} return null; })();
-const map = L.map('map',{zoomControl:false}).setView(
+const map = L.map('map',{zoomControl:false, doubleClickZoom:false}).setView(
   _savedView ? [_savedView.lat, _savedView.lng] : [10.0, 98.6],
   _savedView ? _savedView.z : 9
 );
@@ -508,6 +522,12 @@ map.on('moveend zoomend', () => {
     const c = map.getCenter();
     localStorage.setItem('tidtam_mv', JSON.stringify({lat:c.lat, lng:c.lng, z:map.getZoom()}));
   } catch{}
+});
+// tap-to-zoom: clicking empty map area zooms in one level toward that point (smooth)
+map.on('click', e => {
+  const z = map.getZoom();
+  if(z >= map.getMaxZoom()) return;
+  map.flyTo(e.latlng, z+1, {duration:.5});
 });
 
 /* ═══════════════════════════════════════
@@ -620,6 +640,57 @@ function fitFleet(){
   if(!pts.length) return;
   if(pts.length===1){ map.setView(pts[0],13); return; }
   map.fitBounds(L.latLngBounds(pts),{padding:[40,40]});
+}
+
+let userMarker = null;
+
+function addUserMarker(){
+  if(!userPos || userMarker) return;
+  userMarker = L.marker([userPos.lat, userPos.lng], {
+    icon: L.divIcon({
+      className: 'user-marker',
+      html: '<div class="user-pulse-ring"></div><div class="user-dot"></div>',
+      iconSize: [18,18], iconAnchor: [9,9]
+    }),
+    zIndexOffset: 1000,
+    interactive: false
+  }).addTo(map);
+  if(navigator.geolocation){
+    navigator.geolocation.watchPosition(
+      p => {
+        userPos = {lat:p.coords.latitude, lng:p.coords.longitude};
+        userMarker.setLatLng([userPos.lat, userPos.lng]);
+      },
+      null,
+      {enableHighAccuracy:true, maximumAge:30000, timeout:10000}
+    );
+  }
+}
+
+function getUserPosOnce(timeoutMs=2500){
+  if(!navigator.geolocation) return Promise.resolve(null);
+  return new Promise(resolve => {
+    const t = setTimeout(()=>resolve(null), timeoutMs);
+    navigator.geolocation.getCurrentPosition(
+      p => { clearTimeout(t); resolve({lat:p.coords.latitude, lng:p.coords.longitude}); },
+      () => { clearTimeout(t); resolve(null); },
+      {enableHighAccuracy:false, maximumAge:30000, timeout:2000}
+    );
+  });
+}
+
+// Default view (boot): center on user + N nearest vehicles. Fallback to whole fleet.
+function fitUserAndNearby(n=6){
+  if(!userPos){ fitFleet(); return; }
+  const userLL = [userPos.lat, userPos.lng];
+  const vlls = Object.values(markers).map(m=>m.getLatLng()).filter(ll=>ll.lat&&ll.lng);
+  if(!vlls.length){ map.setView(userLL, 14); return; }
+  const nearest = vlls
+    .map(ll=>({ll, d:haversine(userPos.lat, userPos.lng, ll.lat, ll.lng)}))
+    .sort((a,b)=>a.d-b.d)
+    .slice(0, n)
+    .map(x=>x.ll);
+  map.fitBounds(L.latLngBounds([userLL, ...nearest]), {padding:[50,50], maxZoom:14});
 }
 
 document.getElementById('logo').addEventListener('click', fitFleet);
@@ -814,7 +885,11 @@ function setGroupMode(mode){
   document.getElementById('gm-location').classList.toggle('active', mode==='location');
   if(mode==='location' && !userPos){
     navigator.geolocation.getCurrentPosition(
-      p => { userPos={lat:p.coords.latitude, lng:p.coords.longitude}; renderSidebar(vehicles); },
+      p => {
+        userPos={lat:p.coords.latitude, lng:p.coords.longitude};
+        addUserMarker();
+        renderSidebar(vehicles);
+      },
       () => { groupMode='status'; setGroupMode('status'); }
     );
   }
@@ -937,7 +1012,7 @@ async function loadData(){
   renderMarkers(vehicles);
   renderSidebar(vehicles);
   updateStats(vehicles);
-  if(firstLoad){ firstLoad=false; if(!_savedView) fitFleet(); }
+  if(firstLoad){ firstLoad=false; if(!_savedView) { userPos ? fitUserAndNearby() : fitFleet(); } }
 }
 
 /* ═══════════════════════════════════════
@@ -1051,6 +1126,10 @@ function initPullToRefresh(){
   if (!ok) return;
   document.body.classList.add('authed');
   initPullToRefresh();
+  // Quick race: get user position before first fitBounds so default view
+  // centers on user + nearest vehicles instead of the whole fleet.
+  userPos = await getUserPosOnce();
+  if (userPos) addUserMarker();
   await loadData();
   // auto-trigger a fresh scrape if newest row is older than 5 min
   const ageMs = Date.now() - latestUpdatedAt(vehicles);
