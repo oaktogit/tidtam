@@ -293,6 +293,28 @@
     /* leaflet */
     .leaflet-popup-content-wrapper { border-radius:10px; font-family:'Kanit',sans-serif; font-size:13px; }
     .truck-marker { background:transparent !important; border:none !important; }
+
+    /* ── group mode toggle ── */
+    #group-toggle {
+      display: flex; gap: 4px; padding: 8px 8px 4px;
+      border-bottom: 1px solid var(--border); margin-bottom: 4px; flex-shrink: 0;
+    }
+    .gm-btn {
+      flex: 1; padding: 5px 8px; font-size: .68rem; font-weight: 700;
+      border: 1.5px solid var(--border); border-radius: 7px;
+      background: var(--bg); color: var(--dim); cursor: pointer;
+      font-family: 'Kanit', sans-serif; transition: all .15s;
+    }
+    .gm-btn.active { background: var(--teal-lt); border-color: var(--teal-bd); color: var(--teal); }
+
+    /* ── pull-to-refresh indicator ── */
+    #pull-ind {
+      position: absolute; top: 0; left: 0; right: 0; height: 0;
+      overflow: hidden; z-index: 1;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--teal-lt); border-bottom: 1.5px solid var(--teal-bd);
+      font-size: .75rem; font-weight: 600; color: var(--teal);
+    }
   </style>
 </head>
 <body>
@@ -322,6 +344,8 @@
   <!-- SIDEBAR -->
   <div id="sidebar">
 
+    <div id="pull-ind"></div>
+
     <!-- mini strip (desktop collapsed) -->
     <div id="sb-mini">
       <div class="mstat mv" onclick="expandTo('mv')" title="วิ่ง"><span id="mm-m">0</span></div>
@@ -331,6 +355,10 @@
 
     <!-- full content -->
     <div id="sb-inner">
+      <div id="group-toggle">
+        <button class="gm-btn active" id="gm-status"   onclick="setGroupMode('status')">สถานะ</button>
+        <button class="gm-btn"        id="gm-location" onclick="setGroupMode('location')">ระยะห่าง</button>
+      </div>
       <div id="vlist"></div>
     </div>
   </div>
@@ -456,6 +484,7 @@ const SVG = {
    STATE
 ═══════════════════════════════════════ */
 let vehicles=[], markers={}, filter='all';
+let groupMode='status', userPos=null;
 const secOpen = {mv:true, st:true, of:false};
 
 const OFFLINE = ['offline','ไม่เชื่อมต่อ'];
@@ -552,6 +581,12 @@ function gmapsNav(lat,lng){
   return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
 }
 
+function haversine(lat1,lng1,lat2,lng2){
+  const R=6371,dLat=(lat2-lat1)*Math.PI/180,dLng=(lng2-lng1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
 function popupHTML(v){
   const lat = v.lat, lng = v.lng;
   const navUrl = gmapsNav(lat,lng);
@@ -574,8 +609,10 @@ function renderMarkers(list){
   list.forEach(v=>{
     if(!+v.lat||!+v.lng) return;
     const k=`${v.source}_${v.vehicle_id}`;
-    markers[k]=L.marker([v.lat,v.lng],{icon:mkIcon(cls(v), v.heading)})
-      .bindPopup(popupHTML(v))
+    const lat=+v.lat, lng=+v.lng;
+    markers[k]=L.marker([lat,lng],{icon:mkIcon(cls(v), v.heading)})
+      .bindPopup(popupHTML(v),{autoPan:false})
+      .on('click',()=>map.setView([lat,lng],14))
       .addTo(map);
   });
 }
@@ -596,6 +633,10 @@ function cardHTML(v){
   const navHTML = navable
     ? `<a class="nav-link" href="${gmapsNav(v.lat,v.lng)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="นำทางด้วย Google Maps">🧭 นำทาง</a>`
     : '';
+  const km = v._km;
+  const distHTML = (km !== undefined && isFinite(km))
+    ? `<span style="color:var(--teal);font-size:.58rem;font-weight:700">${km<1?Math.round(km*1000)+' ม.':km.toFixed(1)+' กม.'}</span>`
+    : '';
   return `<div class="vcard ${c}" onclick="focusV('${key}')">
     <div class="car-icon">${SVG[c]()}</div>
     <div class="vbody">
@@ -610,6 +651,7 @@ function cardHTML(v){
       </div>
       <div class="meta">
         ${navHTML}
+        ${distHTML}
         ${time?`<span style="margin-left:auto">🕐 ${time}</span>`:'<span style="margin-left:auto"></span>'}
       </div>
     </div>
@@ -617,9 +659,56 @@ function cardHTML(v){
 }
 
 /* ═══════════════════════════════════════
+   GROUP MODE TOGGLE
+═══════════════════════════════════════ */
+function setGroupMode(mode){
+  groupMode = mode;
+  document.getElementById('gm-status').classList.toggle('active', mode==='status');
+  document.getElementById('gm-location').classList.toggle('active', mode==='location');
+  if(mode==='location' && !userPos){
+    navigator.geolocation.getCurrentPosition(
+      p => { userPos={lat:p.coords.latitude, lng:p.coords.longitude}; renderSidebar(vehicles); },
+      () => { groupMode='status'; setGroupMode('status'); }
+    );
+  }
+  renderSidebar(vehicles);
+}
+
+/* ═══════════════════════════════════════
    SIDEBAR RENDER
 ═══════════════════════════════════════ */
+function renderSidebarByLocation(list){
+  const shown = filter==='all' ? list : list.filter(v=>cls(v)===filter);
+  if(!userPos){
+    document.getElementById('vlist').innerHTML=
+      '<div style="padding:28px 16px;text-align:center;color:var(--dim);font-size:.82rem">กำลังขอตำแหน่ง GPS…</div>';
+    return;
+  }
+  const withDist = shown
+    .map(v=>({...v, _km:(+v.lat&&+v.lng)?haversine(userPos.lat,userPos.lng,+v.lat,+v.lng):Infinity}))
+    .sort((a,b)=>a._km-b._km);
+  const locGroups=[
+    {key:'ln',cls:'mv',label:'📍 ใกล้ฉัน',sub:'< 5 กม.',  list:withDist.filter(v=>v._km<5)},
+    {key:'lm',cls:'st',label:'🗺 ในพื้นที่',sub:'5–50 กม.',list:withDist.filter(v=>v._km>=5&&v._km<50)},
+    {key:'lf',cls:'of',label:'🌏 ไกล',     sub:'> 50 กม.',list:withDist.filter(v=>v._km>=50)},
+  ];
+  document.getElementById('vlist').innerHTML = locGroups.map(g=>{
+    if(!g.list.length) return '';
+    if(secOpen[g.key]===undefined) secOpen[g.key] = g.key!=='lf';
+    const open=secOpen[g.key];
+    return `<div class="sec-hdr ${g.cls}" onclick="toggleSec('${g.key}')">
+      <span>${g.label} <small style="font-weight:400;opacity:.65">${g.sub}</small> (${g.list.length})</span>
+      <div class="ln"></div>
+      <span class="arr" id="ar-${g.key}">${open?'▼':'▶'}</span>
+    </div>
+    <div class="sec-body ${open?'':'shut'}" id="sb-${g.key}">
+      ${g.list.map(v=>cardHTML(v)).join('')}
+    </div>`;
+  }).join('');
+}
+
 function renderSidebar(list){
+  if(groupMode==='location'){ renderSidebarByLocation(list); return; }
   const shown = filter==='all' ? list : list.filter(v=>cls(v)===filter);
   const groups = { mv: shown.filter(v=>cls(v)==='mv'), st: shown.filter(v=>cls(v)==='st'), of: shown.filter(v=>cls(v)==='of') };
   const labels  = { mv:['▶','วิ่งอยู่'], st:['■','จอด'], of:['○','ออฟไลน์'] };
@@ -698,7 +787,47 @@ async function loadData(){
   renderSidebar(vehicles);
   updateStats(vehicles);
 }
+
+/* ═══════════════════════════════════════
+   PULL-TO-REFRESH (sidebar)
+═══════════════════════════════════════ */
+function initPullToRefresh(){
+  const el  = document.getElementById('sb-inner');
+  const ind = document.getElementById('pull-ind');
+  const THRESHOLD = 55;
+  let startY=0, pulling=false;
+
+  el.addEventListener('touchstart', e=>{
+    startY = e.touches[0].clientY;
+    pulling = el.scrollTop === 0;
+  }, {passive:true});
+
+  el.addEventListener('touchmove', e=>{
+    if(!pulling) return;
+    const dy = e.touches[0].clientY - startY;
+    if(dy <= 0){ pulling=false; return; }
+    const pull = Math.min(dy * 0.52, THRESHOLD + 12);
+    el.style.transform  = `translateY(${pull}px)`;
+    ind.style.height    = pull + 'px';
+    ind.textContent     = pull >= THRESHOLD ? '↑ ปล่อยเพื่อรีเฟรช' : '↓ ดึงเพื่อรีเฟรช';
+  }, {passive:true});
+
+  const snap = () => {
+    if(!pulling) return;
+    const pull = parseFloat(el.style.transform.match(/[\d.]+/)?.[0] || '0');
+    pulling = false;
+    el.style.transition  = 'transform .25s ease';
+    el.style.transform   = 'translateY(0)';
+    ind.style.height     = '0';
+    setTimeout(()=>{ el.style.transition=''; }, 260);
+    if(pull >= THRESHOLD) loadData();
+  };
+  el.addEventListener('touchend',    snap, {passive:true});
+  el.addEventListener('touchcancel', snap, {passive:true});
+}
+
 loadData();
+initPullToRefresh();
 setInterval(loadData,60000);
 
 /* close drawer when resize back to desktop */
