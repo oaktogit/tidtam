@@ -936,6 +936,16 @@ function computeAlerts(v){
   const spd = +v.speed || 0;
   if(spd > 120)      out.push({type:'speed', sev:'crit', msg:`ขับเร็ว ${Math.round(spd)} km/h`});
   else if(spd > 90)  out.push({type:'speed', sev:'warn', msg:`ขับเร็ว ${Math.round(spd)} km/h`});
+  // Thai law: trucks may not drive > 4 hours continuously. Provider-flagged.
+  // extra may arrive as a JSON string (Supabase TEXT column) or as an object
+  // (FastAPI deserializes server-side) — handle both.
+  let extra = v.extra;
+  if (typeof extra === 'string') {
+    try { extra = JSON.parse(extra); } catch { extra = null; }
+  }
+  if (extra && extra.over_4h === true) {
+    out.push({type:'over4h', sev:'crit', msg:'⏰ ขับเกิน 4 ชม. (พรบ.ขนส่ง)'});
+  }
   // Stale-data alert only for vehicles the provider still treats as online —
   // OFFLINE rows are already surfaced in the ออฟไลน์ filter.
   if(cls(v) !== 'of'){
