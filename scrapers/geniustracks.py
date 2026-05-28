@@ -100,6 +100,9 @@ class GeniusTracksScraper(BaseScraper):
                 "status": status,
                 "address": d.get("address", ""),
                 "heading": heading,
+                "extra": {
+                    "over_4h": bool(d.get("isDrivingOverFourHours")),
+                },
             })
 
         return vehicles

@@ -1,3 +1,4 @@
+import json
 import os
 import sqlite3
 from datetime import datetime
@@ -45,6 +46,7 @@ def init_db():
             status TEXT,
             address TEXT,
             heading REAL,
+            extra TEXT,
             updated_at TEXT NOT NULL,
             raw_data TEXT
         )
@@ -60,6 +62,7 @@ def init_db():
         for col_sql in (
             "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS address TEXT",
             "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS heading REAL",
+            "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS extra TEXT",
         ):
             try:
                 _exec(conn, col_sql)
@@ -69,6 +72,7 @@ def init_db():
         for col_sql in (
             "ALTER TABLE vehicles ADD COLUMN address TEXT",
             "ALTER TABLE vehicles ADD COLUMN heading REAL",
+            "ALTER TABLE vehicles ADD COLUMN extra TEXT",
         ):
             try:
                 conn.execute(col_sql)
@@ -80,6 +84,7 @@ def init_db():
 
 def upsert_vehicle(source: str, vehicle_id: str, data: dict):
     now = datetime.now().isoformat()
+    extra_json = json.dumps(data.get("extra") or {}, ensure_ascii=False)
     conn = _get_conn()
     existing = _exec(conn,
         "SELECT id FROM vehicles WHERE source=? AND vehicle_id=?",
@@ -89,7 +94,7 @@ def upsert_vehicle(source: str, vehicle_id: str, data: dict):
     if existing:
         _exec(conn, """
             UPDATE vehicles SET
-                name=?, plate=?, lat=?, lng=?, speed=?, status=?, address=?, heading=?, updated_at=?, raw_data=?
+                name=?, plate=?, lat=?, lng=?, speed=?, status=?, address=?, heading=?, extra=?, updated_at=?, raw_data=?
             WHERE source=? AND vehicle_id=?
         """, (
             data.get("name"), data.get("plate"),
@@ -97,13 +102,14 @@ def upsert_vehicle(source: str, vehicle_id: str, data: dict):
             data.get("speed"), data.get("status"),
             data.get("address", ""),
             data.get("heading"),
+            extra_json,
             now, str(data),
             source, vehicle_id
         ))
     else:
         _exec(conn, """
-            INSERT INTO vehicles (source, vehicle_id, name, plate, lat, lng, speed, status, address, heading, updated_at, raw_data)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+            INSERT INTO vehicles (source, vehicle_id, name, plate, lat, lng, speed, status, address, heading, extra, updated_at, raw_data)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             source, vehicle_id,
             data.get("name"), data.get("plate"),
@@ -111,6 +117,7 @@ def upsert_vehicle(source: str, vehicle_id: str, data: dict):
             data.get("speed"), data.get("status"),
             data.get("address", ""),
             data.get("heading"),
+            extra_json,
             now, str(data)
         ))
     conn.commit()
@@ -129,6 +136,16 @@ def get_all_vehicles():
             "SELECT * FROM vehicles ORDER BY source, name"
         ).fetchall()]
     conn.close()
+    # Deserialize extra JSON so the API returns a real object, not a string.
+    for r in rows:
+        raw = r.get("extra")
+        if isinstance(raw, str) and raw:
+            try:
+                r["extra"] = json.loads(raw)
+            except Exception:
+                r["extra"] = {}
+        elif raw is None:
+            r["extra"] = {}
     return rows
 
 
