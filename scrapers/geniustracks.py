@@ -89,6 +89,12 @@ class GeniusTracksScraper(BaseScraper):
                 heading = float(d.get("car_rotation") or 0)
             except (TypeError, ValueError):
                 heading = 0.0
+            try:
+                # mileage is cumulative; mile (per-trip) as fallback. Either
+                # works for Park detection — delta=0 while stopped.
+                odometer = float(d.get("mileage") or d.get("mile") or 0) or None
+            except (TypeError, ValueError):
+                odometer = None
 
             vehicles.append({
                 "vehicle_id": str(d.get("id")),
@@ -100,6 +106,8 @@ class GeniusTracksScraper(BaseScraper):
                 "status": status,
                 "address": d.get("address", ""),
                 "heading": heading,
+                "odometer": odometer,
+                "engine_on": bool(engine_on),
                 "extra": {
                     "over_4h": bool(d.get("isDrivingOverFourHours")),
                 },
