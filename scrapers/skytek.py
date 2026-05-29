@@ -131,6 +131,15 @@ class SkytekScraper(BaseScraper):
 
             address = await reverse_geocode(lat, lng) if lat and lng else ""
 
+            # 'Miles' in GetLocationData is a meter-resolution integer odometer
+            # (sample observed: 911728992 → 911,729 km, matching legacy's km
+            # scale). Convert to km. Empty/zero treated as no-data.
+            try:
+                miles_m = float(pos.get("Miles") or 0)
+                odometer = (miles_m / 1000.0) if miles_m > 0 else None
+            except (TypeError, ValueError):
+                odometer = None
+
             vehicles.append({
                 "vehicle_id": sysno,
                 "name": f"{plate} {meta.get('fleet', '')}".strip(),
@@ -141,8 +150,7 @@ class SkytekScraper(BaseScraper):
                 "status": status,
                 "address": address,
                 "heading": heading,
-                # odometer requires a fresh inspect of GetLocationData JSON to
-                # confirm the field name (Step 2.4b); leave NULL for now.
+                "odometer": odometer,
                 "engine_on": acc_on if pos else None,
             })
 
