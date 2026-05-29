@@ -143,6 +143,9 @@
       padding:14px 22px; background:rgba(255,255,255,.95); border:1.5px solid var(--border);
       border-radius:10px; font-size:.85rem; color:var(--dim); pointer-events:none; }
     .hist-modal.empty #hist-empty { display:block; }
+    .hist-legend { display:flex; align-items:center; gap:6px; padding:6px 16px 10px; font-size:.65rem;
+      color:var(--dim); flex-wrap:wrap; border-top:1px dashed var(--border); }
+    .lg-chip { color:#fff; padding:1px 7px; border-radius:99px; font-weight:700; font-size:.6rem; }
 
     @media(max-width:600px) {
       .hist-modal { padding:0; }
@@ -548,6 +551,14 @@
         <div class="hstatcard"><div class="v" id="hs-range">—</div><div class="l">ช่วงเวลา</div></div>
       </div>
       <div id="hist-empty" class="hist-empty">ไม่มีข้อมูลในช่วงเวลานี้</div>
+      <div class="hist-legend">
+        เส้น/จุดสีตามความเร็ว:
+        <span class="lg-chip" style="background:#16A34A">≤30</span>
+        <span class="lg-chip" style="background:#EAB308">30–60</span>
+        <span class="lg-chip" style="background:#F97316">60–90</span>
+        <span class="lg-chip" style="background:#DC2626">&gt;90</span>
+        <span style="opacity:.55">km/h · คลิกจุดเพื่อดูเวลา</span>
+      </div>
     </div>
   </div>
 </div>
@@ -1385,6 +1396,25 @@ function setActiveChip(h){
   document.querySelectorAll('.hch').forEach(b => b.classList.toggle('active', +b.dataset.h === h));
 }
 
+// Speed → color scale used for both segments and point markers.
+function speedColor(spd){
+  if(spd > 90) return '#DC2626';      // red — over 90 km/h
+  if(spd > 60) return '#F97316';      // orange
+  if(spd > 30) return '#EAB308';      // yellow
+  return '#16A34A';                   // green — slow / stopped
+}
+
+function histPointHTML(p){
+  const t = new Date(p.recorded_at).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
+  const d = new Date(p.recorded_at).toLocaleDateString('th-TH',{month:'short',day:'numeric'});
+  const spd = Math.round(+p.speed || 0);
+  return `<div style="font-size:12px;line-height:1.5">
+    <b>${d} · ${t}</b><br>
+    🏎️ ${spd} km/h<br>
+    📊 ${p.status || '—'}
+  </div>`;
+}
+
 async function loadHistory(hours){
   setActiveChip(hours);
   if(!histTarget) return;
@@ -1395,13 +1425,35 @@ async function loadHistory(hours){
   const modal = document.getElementById('hist-modal');
   modal.classList.toggle('empty', pts.length === 0);
   if(!pts.length) return;
-  const latlngs = pts.filter(p => +p.lat && +p.lng).map(p => [+p.lat, +p.lng]);
-  if(!latlngs.length) return;
-  const line = L.polyline(latlngs, {color:'#0D9488', weight:3, opacity:.85}).addTo(histMap);
-  const start = L.circleMarker(latlngs[0], {radius:7, color:'#fff', weight:2, fillColor:'#16A34A', fillOpacity:1}).addTo(histMap).bindTooltip('เริ่ม');
-  const end = L.circleMarker(latlngs[latlngs.length-1], {radius:7, color:'#fff', weight:2, fillColor:'#DC2626', fillOpacity:1}).addTo(histMap).bindTooltip('ล่าสุด');
-  histLayers.push(line, start, end);
-  histMap.fitBounds(line.getBounds(), {padding:[24,24], maxZoom:14});
+  const valid = pts.filter(p => +p.lat && +p.lng);
+  if(!valid.length) return;
+  // Speed-colored polyline segments: one line per consecutive pair, colored by avg speed.
+  const allLatLngs = [];
+  for(let i = 1; i < valid.length; i++){
+    const a = valid[i-1], b = valid[i];
+    const avgSpd = ((+a.speed||0) + (+b.speed||0)) / 2;
+    const seg = L.polyline([[+a.lat,+a.lng],[+b.lat,+b.lng]],
+      {color: speedColor(avgSpd), weight:4, opacity:.85}).addTo(histMap);
+    histLayers.push(seg);
+    if(i === 1) allLatLngs.push([+a.lat,+a.lng]);
+    allLatLngs.push([+b.lat,+b.lng]);
+  }
+  // Tappable circle markers for every point — color matches speed at that point.
+  valid.forEach((p, i) => {
+    const isStart = i === 0, isEnd = i === valid.length - 1;
+    const r = (isStart || isEnd) ? 7 : 4;
+    const m = L.circleMarker([+p.lat, +p.lng], {
+      radius: r,
+      color: '#fff',
+      weight: isStart || isEnd ? 2 : 1,
+      fillColor: isStart ? '#16A34A' : isEnd ? '#DC2626' : speedColor(+p.speed||0),
+      fillOpacity: 1,
+    }).addTo(histMap).bindPopup(histPointHTML(p));
+    histLayers.push(m);
+  });
+  if(allLatLngs.length){
+    histMap.fitBounds(L.latLngBounds(allLatLngs), {padding:[24,24], maxZoom:14});
+  }
   setTimeout(()=>histMap.invalidateSize(), 60);
 }
 
