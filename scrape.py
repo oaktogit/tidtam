@@ -6,6 +6,7 @@ import asyncio
 import os
 import random
 import time
+from playwright.async_api import async_playwright
 from db.database import init_db, get_known_addresses, cleanup_old_positions
 from scrapers.geocode import warm_cache_from
 from scrapers.skytek import SkytekScraper
@@ -39,7 +40,13 @@ async def scrape_all():
     warmed = warm_cache_from(get_known_addresses())
     print(f"[geocode] warmed cache with {warmed} known addresses")
     scrapers = build_scrapers()
-    await asyncio.gather(*[s.run() for s in scrapers])
+    # แชร์ 1 chromium ให้ 3 scrapers (context แยกกัน คุกกี้ไม่ปน)
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        try:
+            await asyncio.gather(*[s.run(browser) for s in scrapers])
+        finally:
+            await browser.close()
     try:
         deleted = cleanup_old_positions(days=90)
         if deleted:

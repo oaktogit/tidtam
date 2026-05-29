@@ -22,24 +22,37 @@ class BaseScraper(ABC):
         """Return list of dicts with keys: vehicle_id, name, plate, lat, lng, speed, status"""
         pass
 
-    async def run(self):
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
+    async def run(self, browser=None):
+        # ถ้า caller ส่ง browser มา = แชร์ใช้ร่วมกัน (caller ดูแล lifecycle เอง)
+        # ถ้าไม่ส่ง = launch เองเหมือนเดิม (สำหรับ main.py local dev)
+        if browser is not None:
             context = await browser.new_context()
-            page = await context.new_page()
             try:
-                logged_in = await self.login(page)
-                if not logged_in:
-                    print(f"[{self.source_name}] Login failed")
-                    return []
-
-                vehicles = await self.get_vehicles(page)
-                for v in vehicles:
-                    upsert_vehicle(self.source_name, v["vehicle_id"], v)
-                print(f"[{self.source_name}] Updated {len(vehicles)} vehicles")
-                return vehicles
-            except Exception:
-                print(f"[{self.source_name}] Error:\n{traceback.format_exc()}")
-                return []
+                page = await context.new_page()
+                return await self._scrape(page)
             finally:
-                await browser.close()
+                await context.close()
+
+        async with async_playwright() as p:
+            own_browser = await p.chromium.launch(headless=True)
+            try:
+                context = await own_browser.new_context()
+                page = await context.new_page()
+                return await self._scrape(page)
+            finally:
+                await own_browser.close()
+
+    async def _scrape(self, page: Page) -> list[dict]:
+        try:
+            logged_in = await self.login(page)
+            if not logged_in:
+                print(f"[{self.source_name}] Login failed")
+                return []
+            vehicles = await self.get_vehicles(page)
+            for v in vehicles:
+                upsert_vehicle(self.source_name, v["vehicle_id"], v)
+            print(f"[{self.source_name}] Updated {len(vehicles)} vehicles")
+            return vehicles
+        except Exception:
+            print(f"[{self.source_name}] Error:\n{traceback.format_exc()}")
+            return []
