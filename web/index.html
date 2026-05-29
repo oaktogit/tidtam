@@ -123,6 +123,42 @@
       border-radius:4px; font-size:11px; color:#7F1D1D; }
     .pop-alerts b { color:#991B1B; }
 
+    /* HISTORY MODAL — Phase 4c */
+    .hist-modal { display:none; position:fixed; inset:0; background:rgba(15,23,42,.55); z-index:5000;
+      align-items:center; justify-content:center; padding:20px; }
+    .hist-panel { background:#fff; width:100%; max-width:980px; height:100%; max-height:680px;
+      border-radius:14px; box-shadow:0 24px 60px rgba(0,0,0,.3); display:flex; flex-direction:column;
+      overflow:hidden; }
+    .hist-head { display:flex; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid var(--border); flex-shrink:0; }
+    .hist-title { font-weight:700; font-size:.95rem; color:var(--teal); flex-shrink:0; }
+    .hist-title span { font-family:'Share Tech Mono',monospace; color:#0F172A; margin-left:6px; }
+    .hist-chips { display:flex; gap:4px; flex:1; justify-content:center; }
+    .hch { border:1.5px solid var(--border); background:var(--bg); color:var(--dim); padding:5px 12px;
+      border-radius:7px; font-size:.72rem; font-weight:600; font-family:inherit; cursor:pointer; }
+    .hch.active { background:var(--teal-lt); border-color:var(--teal); color:var(--teal); }
+    .hist-close { border:none; background:transparent; font-size:1.4rem; color:var(--dim); cursor:pointer;
+      width:32px; height:32px; border-radius:6px; flex-shrink:0; }
+    .hist-close:hover { background:#F1F5F9; color:#0F172A; }
+    .hist-body { flex:1; display:grid; grid-template-rows:1fr auto; gap:0; min-height:0; }
+    #hist-map { width:100%; height:100%; min-height:300px; }
+    .hist-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; padding:12px 16px;
+      border-top:1px solid var(--border); flex-shrink:0; }
+    .hstatcard { background:var(--bg); border:1.5px solid var(--border); border-radius:9px;
+      padding:6px 10px; text-align:center; }
+    .hstatcard .v { font-family:'Share Tech Mono',monospace; font-size:1rem; font-weight:bold; color:var(--teal); }
+    .hstatcard .l { font-size:.55rem; color:var(--dim); margin-top:2px; }
+    .hist-empty { display:none; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+      padding:14px 22px; background:rgba(255,255,255,.95); border:1.5px solid var(--border);
+      border-radius:10px; font-size:.85rem; color:var(--dim); pointer-events:none; }
+    .hist-modal.empty #hist-empty { display:block; }
+
+    @media(max-width:600px) {
+      .hist-modal { padding:0; }
+      .hist-panel { border-radius:0; max-height:100%; }
+      .hist-stats { grid-template-columns:repeat(2,1fr); }
+      .hist-title { font-size:.85rem; }
+    }
+
     .schips { display: flex; gap: 4px; flex-shrink: 0; }
     .schip  { font-size:.6rem; padding:2px 7px; border-radius:99px; border:1.5px solid; font-weight:600; white-space:nowrap; }
     .schip.skytek       { border-color:#38BDF8; color:#0284C7; background:#F0F9FF; }
@@ -503,6 +539,31 @@
     <div id="overlay" onclick="closeSidebar()"></div>
   </div>
 
+</div>
+
+<!-- HISTORY MODAL — Phase 4c trip view -->
+<div id="hist-modal" class="hist-modal" onclick="if(event.target===this)closeHistory()">
+  <div class="hist-panel">
+    <div class="hist-head">
+      <div class="hist-title">📜 ประวัติ <span id="hist-plate"></span></div>
+      <div class="hist-chips">
+        <button class="hch active" data-h="24"  onclick="loadHistory(24)">24 ชม.</button>
+        <button class="hch"        data-h="168" onclick="loadHistory(168)">7 วัน</button>
+        <button class="hch"        data-h="720" onclick="loadHistory(720)">30 วัน</button>
+      </div>
+      <button class="hist-close" onclick="closeHistory()" title="ปิด">✕</button>
+    </div>
+    <div class="hist-body">
+      <div id="hist-map"></div>
+      <div class="hist-stats">
+        <div class="hstatcard"><div class="v" id="hs-dist">—</div><div class="l">ระยะทาง</div></div>
+        <div class="hstatcard"><div class="v" id="hs-maxspd">—</div><div class="l">เร็วสุด</div></div>
+        <div class="hstatcard"><div class="v" id="hs-points">—</div><div class="l">จุดที่บันทึก</div></div>
+        <div class="hstatcard"><div class="v" id="hs-range">—</div><div class="l">ช่วงเวลา</div></div>
+      </div>
+      <div id="hist-empty" class="hist-empty">ไม่มีข้อมูลในช่วงเวลานี้</div>
+    </div>
+  </div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -898,16 +959,23 @@ function popupHTML(v){
   const alertsHTML = alerts.length
     ? `<div class="pop-alerts"><b>🚨 แจ้งเตือน</b><br>${alerts.map(a=>'• '+a.msg).join('<br>')}</div>`
     : '';
+  const plateEsc = (v.plate || v.vehicle_id || '').replace(/'/g, "\\'");
   return `<div style="min-width:170px">
     <b style="font-family:'Share Tech Mono',monospace">${v.plate||v.vehicle_id}</b>
     <div style="font-size:11px;color:#64748B;margin:3px 0">${v.address||''}</div>
     <div style="font-size:12px">ความเร็ว: <b>${v.speed||0}</b> km/h</div>
     ${distHTML}
     ${alertsHTML}
-    <a href="${navUrl}" target="_blank" rel="noopener"
-       style="display:inline-block;margin-top:8px;padding:5px 10px;background:#0D9488;color:#fff;border-radius:6px;font-weight:600;text-decoration:none;font-size:12px">
-      🧭 นำทางด้วย Google Maps
-    </a>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+      <a href="${navUrl}" target="_blank" rel="noopener"
+         style="display:inline-block;padding:5px 10px;background:#0D9488;color:#fff;border-radius:6px;font-weight:600;text-decoration:none;font-size:12px">
+        🧭 นำทาง
+      </a>
+      <button onclick="openHistory('${v.source}','${v.vehicle_id}','${plateEsc}')"
+         style="padding:5px 10px;background:#fff;border:1.5px solid #0D9488;color:#0D9488;border-radius:6px;font-weight:600;font-size:12px;cursor:pointer;font-family:inherit">
+        📜 ประวัติ
+      </button>
+    </div>
   </div>`;
 }
 
@@ -1374,6 +1442,107 @@ function initPullToRefresh(){
 window.addEventListener('resize',()=>{
   if(!isMobile()) closeSidebar();
   map.invalidateSize();
+});
+
+/* ═══════════════════════════════════════
+   HISTORY MODAL — Phase 4c
+═══════════════════════════════════════ */
+let histMap = null;
+let histLayers = [];
+let histTarget = null;       // {source, vehicle_id, plate}
+
+async function fetchPositions(source, vid, hours){
+  // Vercel reads positions directly from Supabase. RLS allows authed users.
+  // recorded_at is UTC-naive in Supabase — compute cutoff in UTC.
+  const cutoffMs = Date.now() - hours*3600*1000;
+  const cutoff = new Date(cutoffMs).toISOString().slice(0,19);  // 'YYYY-MM-DDTHH:MM:SS'
+  try {
+    const { data, error } = await sb.from('positions')
+      .select('lat,lng,speed,status,heading,recorded_at')
+      .eq('source', source)
+      .eq('vehicle_id', vid)
+      .gte('recorded_at', cutoff)
+      .order('recorded_at', {ascending: true});
+    if(error){ console.warn('positions select error:', error); return []; }
+    return data || [];
+  } catch(e){ console.warn('fetchPositions failed:', e); return []; }
+}
+
+function openHistory(source, vid, plate){
+  histTarget = {source, vehicle_id: vid, plate};
+  document.getElementById('hist-plate').textContent = plate || vid;
+  const modal = document.getElementById('hist-modal');
+  modal.classList.remove('empty');
+  modal.style.display = 'flex';
+
+  if(!histMap){
+    histMap = L.map('hist-map',{zoomControl:true}).setView([10.0, 98.6], 9);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+      {attribution:'© CartoDB'}).addTo(histMap);
+  }
+  setActiveChip(24);
+  loadHistory(24);
+  setTimeout(()=>histMap.invalidateSize(), 60);
+}
+
+function closeHistory(){
+  document.getElementById('hist-modal').style.display = 'none';
+}
+
+function setActiveChip(h){
+  document.querySelectorAll('.hch').forEach(b => b.classList.toggle('active', +b.dataset.h === h));
+}
+
+async function loadHistory(hours){
+  setActiveChip(hours);
+  if(!histTarget) return;
+  const pts = await fetchPositions(histTarget.source, histTarget.vehicle_id, hours);
+  histLayers.forEach(l => histMap.removeLayer(l));
+  histLayers = [];
+  updateHistoryStats(pts);
+  const modal = document.getElementById('hist-modal');
+  modal.classList.toggle('empty', pts.length === 0);
+  if(!pts.length) return;
+  const latlngs = pts.filter(p => +p.lat && +p.lng).map(p => [+p.lat, +p.lng]);
+  if(!latlngs.length) return;
+  const line = L.polyline(latlngs, {color:'#0D9488', weight:3, opacity:.85}).addTo(histMap);
+  const start = L.circleMarker(latlngs[0], {radius:7, color:'#fff', weight:2, fillColor:'#16A34A', fillOpacity:1}).addTo(histMap).bindTooltip('เริ่ม');
+  const end = L.circleMarker(latlngs[latlngs.length-1], {radius:7, color:'#fff', weight:2, fillColor:'#DC2626', fillOpacity:1}).addTo(histMap).bindTooltip('ล่าสุด');
+  histLayers.push(line, start, end);
+  histMap.fitBounds(line.getBounds(), {padding:[24,24], maxZoom:14});
+  setTimeout(()=>histMap.invalidateSize(), 60);
+}
+
+function updateHistoryStats(pts){
+  const fmtDist = km => km < 1 ? `${Math.round(km*1000)} ม.` : `${km.toFixed(1)} กม.`;
+  if(!pts.length){
+    ['hs-dist','hs-maxspd','hs-points','hs-range'].forEach(id => document.getElementById(id).textContent = '—');
+    document.getElementById('hs-points').textContent = '0';
+    return;
+  }
+  let dist = 0, maxSpd = 0;
+  for(let i = 1; i < pts.length; i++){
+    dist += haversine(+pts[i-1].lat, +pts[i-1].lng, +pts[i].lat, +pts[i].lng);
+  }
+  for(const p of pts) maxSpd = Math.max(maxSpd, +p.speed || 0);
+  // recorded_at from Supabase is UTC-naive — same convention as toThaiTime: append Z if no tz
+  const parseStamp = s => {
+    const w = /(Z|[+\-]\d{2}:?\d{2})$/.test(s) ? s : s + 'Z';
+    return new Date(w).getTime();
+  };
+  const t0 = parseStamp(pts[0].recorded_at);
+  const t1 = parseStamp(pts[pts.length-1].recorded_at);
+  const hrs = (t1 - t0) / 3600000;
+  document.getElementById('hs-dist').textContent = fmtDist(dist);
+  document.getElementById('hs-maxspd').textContent = `${Math.round(maxSpd)} km/h`;
+  document.getElementById('hs-points').textContent = pts.length;
+  document.getElementById('hs-range').textContent = hrs < 1 ? `${Math.round(hrs*60)} นาที` : `${hrs.toFixed(1)} ชม.`;
+}
+
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape' && document.getElementById('hist-modal').style.display === 'flex'){
+    closeHistory();
+  }
 });
 </script>
 </body>
