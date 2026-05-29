@@ -184,6 +184,7 @@
     .play-marker { background:transparent !important; border:none !important; }
     .play-marker svg { width:100%; height:100%; overflow:visible;
       filter: drop-shadow(0 3px 6px rgba(0,0,0,.45)); }
+    .play-marker.is-playing svg { animation: driveJiggle .15s linear infinite; }
 
     @media(max-width:600px) {
       .play-speeds .psp { padding:3px 5px; font-size:.55rem; }
@@ -599,9 +600,10 @@
                oninput="seekPlayback(this.value/1000)" disabled>
         <span class="play-time" id="play-time">—</span>
         <div class="play-speeds">
-          <button class="psp"        data-s="0.5" onclick="setPlaybackSpeed(0.5)">½×</button>
-          <button class="psp active" data-s="1"   onclick="setPlaybackSpeed(1)">1×</button>
-          <button class="psp"        data-s="2"   onclick="setPlaybackSpeed(2)">2×</button>
+          <button class="psp active" data-s="1" onclick="setPlaybackSpeed(1)">1×</button>
+          <button class="psp"        data-s="2" onclick="setPlaybackSpeed(2)">2×</button>
+          <button class="psp"        data-s="3" onclick="setPlaybackSpeed(3)">3×</button>
+          <button class="psp"        data-s="4" onclick="setPlaybackSpeed(4)">4×</button>
         </div>
       </div>
       <div class="hist-stats">
@@ -1658,6 +1660,8 @@ function stopMarkerHTML(stop){
 ═══════════════════════════════════════ */
 let _histPoints = null;
 let _playState = null;
+let _routedSegments = null;          // parallel to _histPoints pairs: route latlngs[] or null (fallback)
+let _playPath = null;                // densified timeline {lat,lng,time}[] for road-following playback
 const _PLAYBACK_TARGET_SEC = 30;     // 1x = trip plays in this many seconds, regardless of trip length
 
 // Truck marker used for replay — same logo as the app header (minus the
@@ -1686,36 +1690,73 @@ const TRUCK_SVG = `<svg viewBox="0 0 140 82" xmlns="http://www.w3.org/2000/svg">
   <path d="M89 37 Q92.5 39.5 96 37" stroke="#134E4A" stroke-width="1.5" fill="none" stroke-linecap="round"/>
 </svg>`;
 
+// Effective timeline for playback: dense road path if built, else sparse samples.
+// Each point exposes .lat/.lng. _playPath rows carry .time; sample rows use .recorded_at.
+function _playTimeline(){ return _playPath || _histPoints; }
+function _pointTime(p){ return p.time !== undefined ? p.time : parseHistStamp(p.recorded_at); }
+
 function _tripDurationSec(){
-  if(!_histPoints || _histPoints.length < 2) return 0;
-  const t0 = parseHistStamp(_histPoints[0].recorded_at);
-  const t1 = parseHistStamp(_histPoints[_histPoints.length-1].recorded_at);
-  return Math.max(0, (t1 - t0) / 1000);
+  const tl = _playTimeline();
+  if(!tl || tl.length < 2) return 0;
+  return Math.max(0, (_pointTime(tl[tl.length-1]) - _pointTime(tl[0])) / 1000);
 }
 
-// Where would the vehicle be at playbackSec into the trip? Linear lerp between samples.
+// Where would the vehicle be at playbackSec into the trip? Linear lerp between
+// adjacent timeline points — which become road-dense after _playPath is built,
+// so the truck follows U-turns and curves instead of cutting across.
 function _positionAt(playbackSec){
-  const dur = _tripDurationSec();
-  if(dur <= 0){
-    const p = _histPoints[0];
-    return {lat:+p.lat, lng:+p.lng, time: parseHistStamp(p.recorded_at)};
-  }
-  const t0 = parseHistStamp(_histPoints[0].recorded_at);
+  const tl = _playTimeline();
+  if(!tl || tl.length === 0) return {lat:0, lng:0, time:Date.now()};
+  const t0 = _pointTime(tl[0]);
+  const dur = (_pointTime(tl[tl.length-1]) - t0) / 1000;
+  if(dur <= 0) return {lat:+tl[0].lat, lng:+tl[0].lng, time:t0};
   const targetMs = t0 + Math.max(0, Math.min(dur, playbackSec)) * 1000;
   let i = 0;
-  while(i < _histPoints.length - 1 && parseHistStamp(_histPoints[i+1].recorded_at) <= targetMs) i++;
-  if(i >= _histPoints.length - 1){
-    const last = _histPoints[_histPoints.length-1];
+  while(i < tl.length - 1 && _pointTime(tl[i+1]) <= targetMs) i++;
+  if(i >= tl.length - 1){
+    const last = tl[tl.length-1];
     return {lat:+last.lat, lng:+last.lng, time:targetMs};
   }
-  const a = _histPoints[i], b = _histPoints[i+1];
-  const ta = parseHistStamp(a.recorded_at), tb = parseHistStamp(b.recorded_at);
+  const a = tl[i], b = tl[i+1];
+  const ta = _pointTime(a), tb = _pointTime(b);
   const f = (tb === ta) ? 0 : (targetMs - ta) / (tb - ta);
   return {
     lat: +a.lat + (+b.lat - +a.lat) * f,
     lng: +a.lng + (+b.lng - +a.lng) * f,
     time: targetMs,
   };
+}
+
+// Build the dense playback timeline from sample pairs + cached OSRM routes.
+// Each route's points get a timestamp interpolated by cumulative distance
+// along the route, so the truck spends more wall-time on long segments.
+function _buildPlayPath(){
+  if(!_histPoints || _histPoints.length < 2 || !_routedSegments) return null;
+  const path = [];
+  for(let i = 1; i < _histPoints.length; i++){
+    const a = _histPoints[i-1], b = _histPoints[i];
+    const timeA = parseHistStamp(a.recorded_at);
+    const timeB = parseHistStamp(b.recorded_at);
+    const route = _routedSegments[i-1];
+    if(!route || route.length < 2){
+      if(i === 1) path.push({lat:+a.lat, lng:+a.lng, time:timeA});
+      path.push({lat:+b.lat, lng:+b.lng, time:timeB});
+      continue;
+    }
+    let total = 0;
+    const cum = [0];
+    for(let j = 1; j < route.length; j++){
+      total += haversine(route[j-1][0], route[j-1][1], route[j][0], route[j][1]);
+      cum.push(total);
+    }
+    for(let j = 0; j < route.length; j++){
+      if(i > 1 && j === 0) continue;
+      const ratio = total > 0 ? cum[j] / total : 0;
+      const time = timeA + (timeB - timeA) * ratio;
+      path.push({lat:route[j][0], lng:route[j][1], time});
+    }
+  }
+  return path.length >= 2 ? path : null;
 }
 
 function _formatPlayTime(ms){
@@ -1785,6 +1826,8 @@ function _startOrResume(){
   const btn = document.getElementById('play-btn');
   btn.textContent = '⏸';
   btn.classList.add('playing');
+  const el = _playState.marker && _playState.marker.getElement();
+  if(el) el.classList.add('is-playing');
   _playTick();
 }
 
@@ -1795,6 +1838,8 @@ function _pausePlayback(){
   const btn = document.getElementById('play-btn');
   btn.textContent = '▶';
   btn.classList.remove('playing');
+  const el = _playState.marker && _playState.marker.getElement();
+  if(el) el.classList.remove('is-playing');
 }
 
 function stopPlayback(){
@@ -1848,6 +1893,8 @@ async function loadHistory(hours){
   setActiveChip(hours);
   if(!histTarget) return;
   stopPlayback();                                  // cleanup any previous run
+  _routedSegments = null;
+  _playPath = null;
   const token = ++_histLoadToken;
   const pts = await fetchPositions(histTarget.source, histTarget.vehicle_id, hours);
   if(token !== _histLoadToken) return;
@@ -1860,6 +1907,7 @@ async function loadHistory(hours){
   const valid = pts.filter(p => +p.lat && +p.lng);
   if(!valid.length){ _histPoints = null; _resetPlayUI(false); return; }
   _histPoints = valid;
+  _routedSegments = new Array(valid.length - 1).fill(null);
   _resetPlayUI(valid.length >= 2);
   // Detect stops: clusters of stopped points within 50m spanning ≥30 min.
   // Interior points of a stop are hidden — replaced by one 🅿️ marker. Start/end of the trip stay visible.
@@ -1902,6 +1950,7 @@ async function loadHistory(hours){
     const avgSpd = ((+a.speed||0) + (+b.speed||0)) / 2;
     const roadPts = await osrmRoute(a, b);
     if(token !== _histLoadToken) return;
+    _routedSegments[i-1] = roadPts;
     const segPts = roadPts || [[+a.lat,+a.lng],[+b.lat,+b.lng]];
     // Dashed faded style flags fallback segments so the difference is visible.
     const opts = roadPts
@@ -1910,6 +1959,10 @@ async function loadHistory(hours){
     const seg = L.polyline(segPts, opts).addTo(histMap);
     histLayers.push(seg);
   }
+  // All routes resolved → build dense timeline so PLAY follows the road
+  // (including U-turns). If playback is already underway, the next tick
+  // will pick up _playPath automatically — playbackSec is timeline-agnostic.
+  if(token === _histLoadToken) _playPath = _buildPlayPath();
 }
 
 function updateHistoryStats(pts){
