@@ -13,7 +13,8 @@ class SkytekScraper(BaseScraper):
     source_name = "skytek"
 
     async def login(self, page: Page) -> bool:
-        await page.goto(self.url, wait_until="domcontentloaded")
+        await page.goto(self.url)
+        await page.wait_for_load_state("load")
 
         await page.click('input[name="rbl"][value="เลขทะเบียน"]')
         await page.fill('input[name="tbUserName"]', self.username)
