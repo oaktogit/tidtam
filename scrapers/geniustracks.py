@@ -46,34 +46,29 @@ class GeniusTracksScraper(BaseScraper):
             print(f"[geniustracks] initial getRealTimeData wait timed out: {e}")
         await page.wait_for_timeout(300)  # listener flush — async handler finishes quickly
 
-        # ถ้า initial load จับข้อมูลได้แล้ว default group ของ user น่าจะเป็น "ทั้งหมด"
-        # → ข้าม dropdown click ไปเลย (ประหยัด ~3-4 วิ)
-        # ถ้าไม่ได้ ค่อย retry พร้อมคลิก dropdown
-        if captured_count() > 0:
-            print(f"[geniustracks] captured {captured_count()} vehicles on initial load (skipping dropdown)")
-        else:
-            for attempt in range(1, 4):
+        # เลือก "ทั้งหมด" — retry สูงสุด 3 ครั้ง ถ้ายังจับข้อมูลไม่ได้
+        for attempt in range(1, 4):
+            try:
+                await page.click(".select2-selection, [class*='group'] .select2, .select2-container", timeout=5000)
+                await page.wait_for_timeout(400)
+                await page.click("li:has-text('ทั้งหมด')", timeout=5000)
+                # รอ getRealTimeData ของ group change
                 try:
-                    await page.click(".select2-selection, [class*='group'] .select2, .select2-container", timeout=5000)
-                    await page.wait_for_timeout(400)
-                    await page.click("li:has-text('ทั้งหมด')", timeout=5000)
-                    # รอ getRealTimeData ของ group change
-                    try:
-                        await page.wait_for_event(
-                            "response",
-                            predicate=lambda r: "getRealTimeData" in r.url and r.status == 200,
-                            timeout=10000,
-                        )
-                    except Exception:
-                        pass
-                    await page.wait_for_timeout(1500)  # buffer for slow getRealTimeData responses
-                except Exception as e:
-                    print(f"[geniustracks] dropdown attempt {attempt} failed: {e}")
+                    await page.wait_for_event(
+                        "response",
+                        predicate=lambda r: "getRealTimeData" in r.url and r.status == 200,
+                        timeout=10000,
+                    )
+                except Exception:
+                    pass
+                await page.wait_for_timeout(1500)  # buffer for slow getRealTimeData responses
+            except Exception as e:
+                print(f"[geniustracks] dropdown attempt {attempt} failed: {e}")
 
-                if captured_count() > 0:
-                    print(f"[geniustracks] captured {captured_count()} vehicles on attempt {attempt}")
-                    break
-                print(f"[geniustracks] attempt {attempt}: still 0 vehicles, retrying...")
+            if captured_count() > 0:
+                print(f"[geniustracks] captured {captured_count()} vehicles on attempt {attempt}")
+                break
+            print(f"[geniustracks] attempt {attempt}: still 0 vehicles, retrying...")
 
         data = captured.get("data", {})
 
