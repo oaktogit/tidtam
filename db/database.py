@@ -67,6 +67,7 @@ def init_db():
             speed REAL,
             status TEXT,
             heading REAL,
+            address TEXT,
             recorded_at TEXT NOT NULL
         )
     """)
@@ -74,6 +75,17 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_pos_vehicle_time
         ON positions (source, vehicle_id, recorded_at)
     """)
+    # Migration: positions.address didn't exist in the first 4a schema.
+    if DATABASE_URL:
+        try:
+            _exec(conn, "ALTER TABLE positions ADD COLUMN IF NOT EXISTS address TEXT")
+        except Exception:
+            pass
+    else:
+        try:
+            conn.execute("ALTER TABLE positions ADD COLUMN address TEXT")
+        except Exception:
+            pass
     # Additive migrations for tables that pre-date these columns.
     # SQLite has no IF NOT EXISTS for ALTER, so we try/except.
     # Postgres supports IF NOT EXISTS — safe to run every startup.
@@ -111,13 +123,14 @@ def _insert_position(conn, source: str, vehicle_id: str, data: dict, now: str):
     except (TypeError, ValueError):
         return
     _exec(conn, """
-        INSERT INTO positions (source, vehicle_id, lat, lng, speed, status, heading, recorded_at)
-        VALUES (?,?,?,?,?,?,?,?)
+        INSERT INTO positions (source, vehicle_id, lat, lng, speed, status, heading, address, recorded_at)
+        VALUES (?,?,?,?,?,?,?,?,?)
     """, (
         source, vehicle_id,
         data.get("lat"), data.get("lng"),
         data.get("speed"), data.get("status"),
         data.get("heading"),
+        data.get("address", ""),
         now,
     ))
 
@@ -184,7 +197,7 @@ def get_positions(source: str, vehicle_id: str, hours: int = 24) -> list[dict]:
         import psycopg2.extras
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute(
-            "SELECT lat, lng, speed, status, heading, recorded_at FROM positions "
+            "SELECT lat, lng, speed, status, heading, address, recorded_at FROM positions "
             "WHERE source=%s AND vehicle_id=%s AND recorded_at >= %s "
             "ORDER BY recorded_at ASC",
             (source, vehicle_id, cutoff),
@@ -192,7 +205,7 @@ def get_positions(source: str, vehicle_id: str, hours: int = 24) -> list[dict]:
         rows = [dict(r) for r in cur.fetchall()]
     else:
         rows = [dict(r) for r in conn.execute(
-            "SELECT lat, lng, speed, status, heading, recorded_at FROM positions "
+            "SELECT lat, lng, speed, status, heading, address, recorded_at FROM positions "
             "WHERE source=? AND vehicle_id=? AND recorded_at >= ? "
             "ORDER BY recorded_at ASC",
             (source, vehicle_id, cutoff),
