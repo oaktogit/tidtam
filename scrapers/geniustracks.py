@@ -44,7 +44,7 @@ class GeniusTracksScraper(BaseScraper):
             )
         except Exception as e:
             print(f"[geniustracks] initial getRealTimeData wait timed out: {e}")
-        await page.wait_for_timeout(1000)  # let listener flush
+        await page.wait_for_timeout(300)  # listener flush — async handler finishes quickly
 
         # เลือก "ทั้งหมด" — retry สูงสุด 3 ครั้ง ถ้ายังจับข้อมูลไม่ได้
         for attempt in range(1, 4):
@@ -61,7 +61,7 @@ class GeniusTracksScraper(BaseScraper):
                     )
                 except Exception:
                     pass
-                await page.wait_for_timeout(4000)  # buffer for slow getRealTimeData responses
+                await page.wait_for_timeout(1500)  # buffer for slow getRealTimeData responses
             except Exception as e:
                 print(f"[geniustracks] dropdown attempt {attempt} failed: {e}")
 
