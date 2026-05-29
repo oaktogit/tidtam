@@ -75,6 +75,14 @@ create policy "Authenticated read vehicles"
   on public.vehicles for select
   using (auth.role() = 'authenticated');
 
+-- 6) RLS on positions — same pattern, authenticated read only
+alter table public.positions enable row level security;
+
+drop policy if exists "Authenticated read positions" on public.positions;
+create policy "Authenticated read positions"
+  on public.positions for select
+  using (auth.role() = 'authenticated');
+
 -- ════════════════════════════════════════════════════════
 -- หลังจากรัน SQL นี้แล้ว สร้าง admin คนแรก:
 --   1. Authentication → Users → Add user → Create new user

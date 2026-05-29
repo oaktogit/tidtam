@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi import Request
-from db.database import get_all_vehicles
+from db.database import get_all_vehicles, get_positions
 import json
 import os
 
@@ -36,3 +36,10 @@ async def summary():
         "moving": len([v for v in vehicles if v.get("status") in ("moving", "กำลังวิ่ง")]),
         "stopped": len([v for v in vehicles if v.get("status") in ("stopped", "จอด", "idle")]),
     }
+
+
+@app.get("/api/positions")
+async def positions(source: str, vehicle_id: str, hours: int = 24):
+    """Position history for one vehicle, oldest first. Capped at 30 days."""
+    hours = max(1, min(hours, 24 * 30))
+    return get_positions(source, vehicle_id, hours=hours)
