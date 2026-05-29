@@ -1,7 +1,7 @@
 import json
 import os
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
@@ -55,6 +55,25 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_source_vehicle
         ON vehicles (source, vehicle_id)
     """)
+    # Append-only position history. Every scrape that yields a valid GPS fix
+    # inserts one row here; cleanup_old_positions trims rows older than N days.
+    _exec(conn, f"""
+        CREATE TABLE IF NOT EXISTS positions (
+            {pk},
+            source TEXT NOT NULL,
+            vehicle_id TEXT NOT NULL,
+            lat REAL,
+            lng REAL,
+            speed REAL,
+            status TEXT,
+            heading REAL,
+            recorded_at TEXT NOT NULL
+        )
+    """)
+    _exec(conn, """
+        CREATE INDEX IF NOT EXISTS idx_pos_vehicle_time
+        ON positions (source, vehicle_id, recorded_at)
+    """)
     # Additive migrations for tables that pre-date these columns.
     # SQLite has no IF NOT EXISTS for ALTER, so we try/except.
     # Postgres supports IF NOT EXISTS — safe to run every startup.
@@ -80,6 +99,27 @@ def init_db():
                 pass
     conn.commit()
     conn.close()
+
+
+def _insert_position(conn, source: str, vehicle_id: str, data: dict, now: str):
+    """Append one position snapshot. Skip rows with no valid GPS fix."""
+    lat = data.get("lat")
+    lng = data.get("lng")
+    try:
+        if not float(lat or 0) or not float(lng or 0):
+            return
+    except (TypeError, ValueError):
+        return
+    _exec(conn, """
+        INSERT INTO positions (source, vehicle_id, lat, lng, speed, status, heading, recorded_at)
+        VALUES (?,?,?,?,?,?,?,?)
+    """, (
+        source, vehicle_id,
+        data.get("lat"), data.get("lng"),
+        data.get("speed"), data.get("status"),
+        data.get("heading"),
+        now,
+    ))
 
 
 def upsert_vehicle(source: str, vehicle_id: str, data: dict):
@@ -120,8 +160,45 @@ def upsert_vehicle(source: str, vehicle_id: str, data: dict):
             extra_json,
             now, str(data)
         ))
+    _insert_position(conn, source, vehicle_id, data, now)
     conn.commit()
     conn.close()
+
+
+def cleanup_old_positions(days: int = 90) -> int:
+    """Delete position rows older than N days. Returns count deleted."""
+    cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+    conn = _get_conn()
+    cur = _exec(conn, "DELETE FROM positions WHERE recorded_at < ?", (cutoff,))
+    deleted = cur.rowcount if hasattr(cur, "rowcount") else 0
+    conn.commit()
+    conn.close()
+    return deleted
+
+
+def get_positions(source: str, vehicle_id: str, hours: int = 24) -> list[dict]:
+    """Return positions for one vehicle within the last N hours, oldest first."""
+    cutoff = (datetime.now() - timedelta(hours=hours)).isoformat()
+    conn = _get_conn()
+    if DATABASE_URL:
+        import psycopg2.extras
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            "SELECT lat, lng, speed, status, heading, recorded_at FROM positions "
+            "WHERE source=%s AND vehicle_id=%s AND recorded_at >= %s "
+            "ORDER BY recorded_at ASC",
+            (source, vehicle_id, cutoff),
+        )
+        rows = [dict(r) for r in cur.fetchall()]
+    else:
+        rows = [dict(r) for r in conn.execute(
+            "SELECT lat, lng, speed, status, heading, recorded_at FROM positions "
+            "WHERE source=? AND vehicle_id=? AND recorded_at >= ? "
+            "ORDER BY recorded_at ASC",
+            (source, vehicle_id, cutoff),
+        ).fetchall()]
+    conn.close()
+    return rows
 
 
 def get_all_vehicles():

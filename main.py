@@ -1,7 +1,7 @@
 import asyncio
 import sys
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from db.database import init_db
+from db.database import init_db, cleanup_old_positions
 from scrapers.skytek import SkytekScraper
 from scrapers.geniustracks import GeniusTracksScraper
 from scrapers.legacy import LegacyScraper
@@ -22,6 +22,12 @@ async def scrape_all():
     print("=== เริ่มดึงข้อมูล GPS ===")
     scrapers = build_scrapers()
     await asyncio.gather(*[s.run() for s in scrapers])
+    try:
+        deleted = cleanup_old_positions(days=90)
+        if deleted:
+            print(f"[positions] retention: deleted {deleted} rows older than 90 days")
+    except Exception as e:
+        print(f"[positions] retention cleanup failed: {e}")
     print("=== ดึงข้อมูลเสร็จ ===")
 
 

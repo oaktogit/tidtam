@@ -4,7 +4,7 @@ Production entry point — รัน scrape ครั้งเดียวแล
 """
 import asyncio
 import os
-from db.database import init_db, get_known_addresses
+from db.database import init_db, get_known_addresses, cleanup_old_positions
 from scrapers.geocode import warm_cache_from
 from scrapers.skytek import SkytekScraper
 from scrapers.geniustracks import GeniusTracksScraper
@@ -38,6 +38,12 @@ async def scrape_all():
     print(f"[geocode] warmed cache with {warmed} known addresses")
     scrapers = build_scrapers()
     await asyncio.gather(*[s.run() for s in scrapers])
+    try:
+        deleted = cleanup_old_positions(days=90)
+        if deleted:
+            print(f"[positions] retention: deleted {deleted} rows older than 90 days")
+    except Exception as e:
+        print(f"[positions] retention cleanup failed: {e}")
     print("=== ดึงข้อมูลเสร็จ ===")
 
 
