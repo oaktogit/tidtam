@@ -1609,28 +1609,39 @@ function histPointHTML(p){
   </div>`;
 }
 
-// Park = consecutive snapshots that are "stationary" for ≥20 min.
-// Stationary prefers engine_on=0 (engine off, idling not counted);
-// when engine_on is unknown (NULL on historical rows pre-2026-05-30)
-// it falls back to speed=0. Cluster cohesion prefers odometer delta
-// (~0 km between snapshots); falls back to 50m radius when odometer
-// is NULL on either side.
-function detectStops(positions){
+// Per-pair classifier — degrades gracefully as fields drop out.
+// Level 1 (engine or odometer): distinguishes Parked / Idling / Moving
+// Level 2 (speed only):         same three, lower confidence
+// Level 3 (position only):      just Parked / Moving by 50m gate
+// Idling and Parked both keep a cluster alive — a vehicle that briefly
+// fires up the engine in the same spot is still one Park.
+function classifyPair(prev, curr){
   const STOP_RADIUS_M = 50;
   const ODO_DELTA_KM = 0.1;
+  const distM = haversine(+prev.lat, +prev.lng, +curr.lat, +curr.lng) * 1000;
+  const eK = v => v === 0 || v === 1 || v === false || v === true;
+  const eOff = v => v === 0 || v === false;
+  const engineKnown = eK(curr.engine_on) || eK(prev.engine_on);
+  const engineOff = engineKnown && eOff(eK(curr.engine_on) ? curr.engine_on : prev.engine_on);
+  const odoKnown = prev.odometer != null && curr.odometer != null;
+  const odoUnchanged = odoKnown && Math.abs(+curr.odometer - +prev.odometer) <= ODO_DELTA_KM;
+
+  if(engineKnown || odoKnown){
+    if(distM > STOP_RADIUS_M) return 'Moving';
+    const stationary = engineKnown ? engineOff : odoUnchanged;
+    return stationary ? 'Parked' : 'Idling';
+  }
+  if(curr.speed != null){
+    if(distM > STOP_RADIUS_M) return 'Moving';
+    return (+curr.speed || 0) === 0 ? 'Parked' : 'Idling';
+  }
+  return distM <= STOP_RADIUS_M ? 'Parked' : 'Moving';
+}
+
+// Park = consecutive non-Moving pairs spanning ≥20 min wall time.
+function detectStops(positions){
   const MIN_DURATION_MIN = 20;
-  const isStopped = p => {
-    const e = p.engine_on;
-    if(e === 0 || e === false) return true;
-    if(e === 1 || e === true) return false;
-    return (+p.speed || 0) === 0;
-  };
-  const sameStop = (a, b) => {
-    const oA = (a.odometer == null) ? null : +a.odometer;
-    const oB = (b.odometer == null) ? null : +b.odometer;
-    if(oA !== null && oB !== null) return Math.abs(oB - oA) <= ODO_DELTA_KM;
-    return haversine(+a.lat, +a.lng, +b.lat, +b.lng) * 1000 < STOP_RADIUS_M;
-  };
+  if(positions.length < 2) return [];
   const stops = [];
   let cluster = null;
   const finalize = c => {
@@ -1643,14 +1654,14 @@ function detectStops(positions){
     return {lat, lng, start:c[0].recorded_at, end:c[c.length-1].recorded_at,
       duration:minutes, address:c[0].address||'', points:c};
   };
-  for(const p of positions){
-    if(!isStopped(p)){
+  for(let i = 0; i < positions.length - 1; i++){
+    const state = classifyPair(positions[i], positions[i+1]);
+    if(state === 'Moving'){
       if(cluster){ const s = finalize(cluster); if(s) stops.push(s); cluster = null; }
-      continue;
+    } else {
+      if(!cluster) cluster = [positions[i]];
+      cluster.push(positions[i+1]);
     }
-    if(!cluster){ cluster = [p]; continue; }
-    if(sameStop(cluster[0], p)){ cluster.push(p); }
-    else { const s = finalize(cluster); if(s) stops.push(s); cluster = [p]; }
   }
   if(cluster){ const s = finalize(cluster); if(s) stops.push(s); }
   return stops;
