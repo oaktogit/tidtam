@@ -155,6 +155,14 @@
       color:var(--dim); flex-wrap:wrap; border-top:1px dashed var(--border); }
     .lg-chip { color:#fff; padding:1px 7px; border-radius:99px; font-weight:700; font-size:.6rem; }
 
+    /* Stop marker — Phase 5 */
+    .stop-marker { background:transparent; border:none; }
+    .stop-marker-inner { width:28px; height:28px; border-radius:50%;
+      background:#3B82F6; color:#fff; border:2px solid #fff;
+      display:flex; align-items:center; justify-content:center;
+      font-weight:bold; font-size:14px; font-family:serif;
+      box-shadow:0 2px 6px rgba(0,0,0,.25); }
+
     @media(max-width:600px) {
       .hist-modal { padding:0; }
       .hist-panel { border-radius:0; max-height:100%; }
@@ -1469,7 +1477,7 @@ async function fetchPositions(source, vid, hours){
   const cutoff = new Date(cutoffMs).toISOString().slice(0,19);  // 'YYYY-MM-DDTHH:MM:SS'
   try {
     const { data, error } = await sb.from('positions')
-      .select('lat,lng,speed,status,heading,recorded_at')
+      .select('lat,lng,speed,status,heading,address,recorded_at')
       .eq('source', source)
       .eq('vehicle_id', vid)
       .gte('recorded_at', cutoff)
@@ -1539,18 +1547,70 @@ async function osrmRoute(a, b){
   }
 }
 
-function histPointHTML(p){
-  // recorded_at is UTC-naive in Supabase — append 'Z' so toLocale* renders in Bangkok.
-  const iso = p.recorded_at;
+// Parse recorded_at to ms-since-epoch. Supabase stores UTC-naive — append 'Z'
+// so it's interpreted as UTC (otherwise the browser would treat it as local
+// and the Bangkok time-zone conversion would double-shift).
+function parseHistStamp(iso){
   const s = /(Z|[+\-]\d{2}:?\d{2})$/.test(iso) ? iso : iso + 'Z';
-  const dt = new Date(s);
+  return new Date(s).getTime();
+}
+
+function histPointHTML(p){
+  const dt = new Date(parseHistStamp(p.recorded_at));
   const t = dt.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Bangkok'});
   const d = dt.toLocaleDateString('th-TH',{month:'short',day:'numeric',timeZone:'Asia/Bangkok'});
   const spd = Math.round(+p.speed || 0);
-  return `<div style="font-size:12px;line-height:1.5">
-    <b>${d} · ${t}</b><br>
-    🏎️ ${spd} km/h<br>
-    📊 ${p.status || '—'}
+  const addr = (p.address || '').trim();
+  return `<div style="font-size:12px;line-height:1.5;max-width:220px">
+    <b>${d} · ${t}</b>
+    ${addr ? `<br>📍 ${addr}` : ''}
+    <br>🏎️ ${spd} km/h · ${p.status || '—'}
+  </div>`;
+}
+
+// Cluster consecutive stopped points within 50m. A cluster spanning ≥30 min
+// becomes a "stop" — rendered as a 🅿️ marker instead of individual dots.
+function detectStops(positions){
+  const STOP_RADIUS_M = 50;
+  const MIN_DURATION_MIN = 30;
+  const isStopped = p => (+p.speed || 0) === 0;
+  const stops = [];
+  let cluster = null;
+  const finalize = c => {
+    const t0 = parseHistStamp(c[0].recorded_at);
+    const t1 = parseHistStamp(c[c.length-1].recorded_at);
+    const minutes = (t1 - t0) / 60000;
+    if(minutes < MIN_DURATION_MIN || c.length < 2) return null;
+    const lat = c.reduce((s,p)=>s+ +p.lat,0)/c.length;
+    const lng = c.reduce((s,p)=>s+ +p.lng,0)/c.length;
+    return {lat, lng, start:c[0].recorded_at, end:c[c.length-1].recorded_at,
+      duration:minutes, address:c[0].address||'', points:c};
+  };
+  for(const p of positions){
+    if(!isStopped(p)){
+      if(cluster){ const s = finalize(cluster); if(s) stops.push(s); cluster = null; }
+      continue;
+    }
+    if(!cluster){ cluster = [p]; continue; }
+    const c0 = cluster[0];
+    const distM = haversine(+c0.lat, +c0.lng, +p.lat, +p.lng) * 1000;
+    if(distM < STOP_RADIUS_M){ cluster.push(p); }
+    else { const s = finalize(cluster); if(s) stops.push(s); cluster = [p]; }
+  }
+  if(cluster){ const s = finalize(cluster); if(s) stops.push(s); }
+  return stops;
+}
+
+function stopMarkerHTML(stop){
+  const fmtTime = iso => new Date(parseHistStamp(iso)).toLocaleString('th-TH',
+    {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Bangkok'});
+  const fmtDur = m => m < 60 ? `${Math.round(m)} นาที` : `${(m/60).toFixed(1)} ชม.`;
+  return `<div style="font-size:12px;line-height:1.5;max-width:240px">
+    <b>🅿️ จุดจอด</b>
+    ${stop.address ? `<br>📍 ${stop.address}` : ''}
+    <br>⏱️ จอด <b>${fmtDur(stop.duration)}</b>
+    <br>🕐 ${fmtTime(stop.start)} → ${fmtTime(stop.end)}
+    <br><span style="color:#64748B;font-size:11px">${stop.points.length} จุด ภายใน 50 ม.</span>
   </div>`;
 }
 
@@ -1572,9 +1632,18 @@ async function loadHistory(hours){
   if(!pts.length) return;
   const valid = pts.filter(p => +p.lat && +p.lng);
   if(!valid.length) return;
+  // Detect stops: clusters of stopped points within 50m spanning ≥30 min.
+  // Interior points of a stop are hidden — replaced by one 🅿️ marker. Start/end of the trip stay visible.
+  const stops = detectStops(valid);
+  const stopIdx = new Set();
+  stops.forEach(stop => stop.points.forEach(p => {
+    const i = valid.indexOf(p);
+    if(i >= 0) stopIdx.add(i);
+  }));
   // Markers first — instant feedback while road routes are fetched.
   valid.forEach((p, i) => {
     const isStart = i === 0, isEnd = i === valid.length - 1;
+    if(stopIdx.has(i) && !isStart && !isEnd) return;     // hide — covered by 🅿️ marker
     const r = (isStart || isEnd) ? 7 : 4;
     const m = L.circleMarker([+p.lat, +p.lng], {
       radius: r,
@@ -1583,6 +1652,15 @@ async function loadHistory(hours){
       fillColor: isStart ? '#16A34A' : isEnd ? '#DC2626' : speedColor(+p.speed||0),
       fillOpacity: 1,
     }).addTo(histMap).bindPopup(histPointHTML(p));
+    histLayers.push(m);
+  });
+  // Stop markers
+  const stopIcon = L.divIcon({className:'stop-marker',
+    html:'<div class="stop-marker-inner">P</div>',
+    iconSize:[28,28], iconAnchor:[14,14]});
+  stops.forEach(stop => {
+    const m = L.marker([stop.lat, stop.lng], {icon: stopIcon})
+      .addTo(histMap).bindPopup(stopMarkerHTML(stop));
     histLayers.push(m);
   });
   // Fit to sample points — road geometry will sit inside this bound.
