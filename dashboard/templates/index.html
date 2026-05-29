@@ -1527,9 +1527,9 @@ function classifyPair(prev, curr){
   return distM <= STOP_RADIUS_M ? 'Parked' : 'Moving';
 }
 
-// Park = consecutive non-Moving pairs spanning ≥20 min wall time.
+// Park = consecutive non-Moving pairs spanning ≥15 min wall time.
 function detectStops(positions){
-  const MIN_DURATION_MIN = 20;
+  const MIN_DURATION_MIN = 15;
   if(positions.length < 2) return [];
   const stops = [];
   let cluster = null;
@@ -1824,7 +1824,7 @@ async function loadHistory(hours){
   _histPoints = valid;
   _routedSegments = new Array(valid.length - 1).fill(null);
   _resetPlayUI(valid.length >= 2);
-  // Detect stops: stationary clusters spanning ≥20 min — see detectStops().
+  // Detect stops: stationary clusters spanning ≥15 min — see detectStops().
   // Interior points of a stop are hidden — replaced by one 🅿️ marker. Start/end of the trip stay visible.
   const stops = detectStops(valid);
   const stopIdx = new Set();
