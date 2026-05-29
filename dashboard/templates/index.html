@@ -557,7 +557,7 @@
         <span class="lg-chip" style="background:#EAB308">30–60</span>
         <span class="lg-chip" style="background:#F97316">60–90</span>
         <span class="lg-chip" style="background:#DC2626">&gt;90</span>
-        <span style="opacity:.55">km/h · คลิกจุดเพื่อดูเวลา</span>
+        <span style="opacity:.55">km/h · ─ ทึบ = ตามถนน · ┄ ประ = ตรง (fallback)</span>
       </div>
     </div>
   </div>
@@ -1404,6 +1404,33 @@ function speedColor(spd){
   return '#16A34A';                   // green — slow / stopped
 }
 
+// OSRM /route — returns [[lat,lng], ...] road geometry between two points,
+// or null to signal "use straight line". Caches by rounded coords (~11m).
+const _routeCache = new Map();
+const _OSRM_BASE = 'https://router.project-osrm.org/route/v1/driving';
+async function osrmRoute(a, b){
+  // Skip routing for cross-region jumps — likely scrape gap, not a real trip
+  const km = haversine(+a.lat, +a.lng, +b.lat, +b.lng);
+  if(km > 200) return null;
+  const key = `${(+a.lat).toFixed(4)},${(+a.lng).toFixed(4)}→${(+b.lat).toFixed(4)},${(+b.lng).toFixed(4)}`;
+  if(_routeCache.has(key)) return _routeCache.get(key);
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 5000);
+    const url = `${_OSRM_BASE}/${a.lng},${a.lat};${b.lng},${b.lat}?overview=full&geometries=geojson`;
+    const r = await fetch(url, {signal: ctrl.signal});
+    clearTimeout(timer);
+    if(!r.ok) return null;
+    const data = await r.json();
+    if(data.code !== 'Ok' || !data.routes || !data.routes[0]) return null;
+    const latlngs = data.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+    _routeCache.set(key, latlngs);
+    return latlngs;
+  } catch(e){
+    return null;  // timeout, network error, etc. → caller falls back to straight line
+  }
+}
+
 function histPointHTML(p){
   const t = new Date(p.recorded_at).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
   const d = new Date(p.recorded_at).toLocaleDateString('th-TH',{month:'short',day:'numeric'});
@@ -1415,10 +1442,16 @@ function histPointHTML(p){
   </div>`;
 }
 
+// Tracks the most recent loadHistory invocation so a stale OSRM batch
+// (older time-window pick) won't draw segments onto the current view.
+let _histLoadToken = 0;
+
 async function loadHistory(hours){
   setActiveChip(hours);
   if(!histTarget) return;
+  const token = ++_histLoadToken;
   const pts = await fetchPositions(histTarget.source, histTarget.vehicle_id, hours);
+  if(token !== _histLoadToken) return;
   histLayers.forEach(l => histMap.removeLayer(l));
   histLayers = [];
   updateHistoryStats(pts);
@@ -1427,18 +1460,7 @@ async function loadHistory(hours){
   if(!pts.length) return;
   const valid = pts.filter(p => +p.lat && +p.lng);
   if(!valid.length) return;
-  // Speed-colored polyline segments: one line per consecutive pair, colored by avg speed.
-  const allLatLngs = [];
-  for(let i = 1; i < valid.length; i++){
-    const a = valid[i-1], b = valid[i];
-    const avgSpd = ((+a.speed||0) + (+b.speed||0)) / 2;
-    const seg = L.polyline([[+a.lat,+a.lng],[+b.lat,+b.lng]],
-      {color: speedColor(avgSpd), weight:4, opacity:.85}).addTo(histMap);
-    histLayers.push(seg);
-    if(i === 1) allLatLngs.push([+a.lat,+a.lng]);
-    allLatLngs.push([+b.lat,+b.lng]);
-  }
-  // Tappable circle markers for every point — color matches speed at that point.
+  // Markers first — instant feedback while road routes are fetched.
   valid.forEach((p, i) => {
     const isStart = i === 0, isEnd = i === valid.length - 1;
     const r = (isStart || isEnd) ? 7 : 4;
@@ -1451,10 +1473,24 @@ async function loadHistory(hours){
     }).addTo(histMap).bindPopup(histPointHTML(p));
     histLayers.push(m);
   });
-  if(allLatLngs.length){
-    histMap.fitBounds(L.latLngBounds(allLatLngs), {padding:[24,24], maxZoom:14});
-  }
+  // Fit to sample points — road geometry will sit inside this bound.
+  histMap.fitBounds(L.latLngBounds(valid.map(p => [+p.lat, +p.lng])), {padding:[24,24], maxZoom:14});
   setTimeout(()=>histMap.invalidateSize(), 60);
+  // Road-following segments: OSRM /route per pair, fall back to straight line.
+  for(let i = 1; i < valid.length; i++){
+    if(token !== _histLoadToken) return;     // user changed chip mid-fetch
+    const a = valid[i-1], b = valid[i];
+    const avgSpd = ((+a.speed||0) + (+b.speed||0)) / 2;
+    const roadPts = await osrmRoute(a, b);
+    if(token !== _histLoadToken) return;
+    const segPts = roadPts || [[+a.lat,+a.lng],[+b.lat,+b.lng]];
+    // Dashed faded style flags fallback segments so the difference is visible.
+    const opts = roadPts
+      ? {color: speedColor(avgSpd), weight:4, opacity:.85}
+      : {color: speedColor(avgSpd), weight:3, opacity:.5, dashArray:'6,8'};
+    const seg = L.polyline(segPts, opts).addTo(histMap);
+    histLayers.push(seg);
+  }
 }
 
 function updateHistoryStats(pts){
