@@ -13,15 +13,16 @@ class SkytekScraper(BaseScraper):
     source_name = "skytek"
 
     async def login(self, page: Page) -> bool:
-        await page.goto(self.url)
-        await page.wait_for_load_state("load")
+        # domcontentloaded เพียงพอ — block-static ตัดรูป/font ออกแล้ว
+        # ที่เหลือคือ HTML+JS+CSS ซึ่ง domcontentloaded เห็นพร้อมใช้
+        await page.goto(self.url, wait_until="domcontentloaded")
 
         await page.click('input[name="rbl"][value="เลขทะเบียน"]')
         await page.fill('input[name="tbUserName"]', self.username)
         if self.password:
             await page.fill('input[name="tbPwd"]', self.password)
         await page.click('input[id="btnLogin"]')
-        await page.wait_for_load_state("load", timeout=60000)
+        await page.wait_for_load_state("domcontentloaded", timeout=60000)
         print(f"[skytek] after login URL: {page.url}")
 
         return page.url.lower().endswith("vehiclemonitor.aspx")
