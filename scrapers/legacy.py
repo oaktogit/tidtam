@@ -51,6 +51,10 @@ class LegacyScraper(BaseScraper):
                 heading = float(d.get("heading", 0))
             except (TypeError, ValueError):
                 heading = 0.0
+            try:
+                odometer = float(d.get("odometer") or 0) or None
+            except (TypeError, ValueError):
+                odometer = None
 
             if not connected:
                 status = "ไม่เชื่อมต่อ"
@@ -69,6 +73,8 @@ class LegacyScraper(BaseScraper):
                 "status": status,
                 "address": d.get("address", ""),
                 "heading": heading,
+                "odometer": odometer,
+                "engine_on": ignition,
             })
 
         return vehicles
