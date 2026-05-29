@@ -21,7 +21,9 @@ class SkytekScraper(BaseScraper):
         if self.password:
             await page.fill('input[name="tbPwd"]', self.password)
         await page.click('input[id="btnLogin"]')
-        await page.wait_for_load_state("load", timeout=60000)
+        # รอ URL เปลี่ยนตรงๆ — กัน race ที่ click คืนก่อน navigation
+        # (wait_for_load_state รอ state ของ "หน้าปัจจุบัน" ซึ่งอาจยังเป็น login)
+        await page.wait_for_url("**/VehicleMonitor.aspx", timeout=60000)
         print(f"[skytek] after login URL: {page.url}")
 
         return page.url.lower().endswith("vehiclemonitor.aspx")
