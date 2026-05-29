@@ -22,12 +22,23 @@ class BaseScraper(ABC):
         """Return list of dicts with keys: vehicle_id, name, plate, lat, lng, speed, status"""
         pass
 
+    _BLOCK_TYPES = {"image", "font", "media"}
+
+    async def _block_static(self, context):
+        async def _route(route):
+            if route.request.resource_type in self._BLOCK_TYPES:
+                await route.abort()
+            else:
+                await route.continue_()
+        await context.route("**/*", _route)
+
     async def run(self, browser=None):
         # ถ้า caller ส่ง browser มา = แชร์ใช้ร่วมกัน (caller ดูแล lifecycle เอง)
         # ถ้าไม่ส่ง = launch เองเหมือนเดิม (สำหรับ main.py local dev)
         if browser is not None:
             context = await browser.new_context()
             try:
+                await self._block_static(context)
                 page = await context.new_page()
                 return await self._scrape(page)
             finally:
@@ -37,6 +48,7 @@ class BaseScraper(ABC):
             own_browser = await p.chromium.launch(headless=True)
             try:
                 context = await own_browser.new_context()
+                await self._block_static(context)
                 page = await context.new_page()
                 return await self._scrape(page)
             finally:
