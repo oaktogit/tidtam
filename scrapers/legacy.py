@@ -1,3 +1,6 @@
+import asyncio
+import json as json_lib
+import urllib.request
 from playwright.async_api import Page
 from scrapers.base import BaseScraper
 from urllib.parse import urlparse
@@ -21,10 +24,17 @@ class LegacyScraper(BaseScraper):
         base = f"{urlparse(self.url).scheme}://{urlparse(self.url).netloc}"
         api_url = f"{base}/ajax/devices-state.html?state=0"
 
-        data = await page.evaluate(f"""async () => {{
-            const res = await fetch('{api_url}');
-            return await res.json();
-        }}""")
+        # ดึง cookie จาก Playwright context แล้วยิง request ผ่าน urllib
+        # หลีกเลี่ยง round-trip page.evaluate(fetch) ผ่าน browser
+        cookies = await page.context.cookies(api_url)
+        cookie_header = "; ".join(f"{c['name']}={c['value']}" for c in cookies)
+
+        def _fetch():
+            req = urllib.request.Request(api_url, headers={"Cookie": cookie_header})
+            with urllib.request.urlopen(req, timeout=30) as r:
+                return json_lib.loads(r.read())
+
+        data = await asyncio.to_thread(_fetch)
 
         vehicles = []
         for d in data.get("devices", []):
