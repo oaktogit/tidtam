@@ -1498,11 +1498,11 @@ function histPointHTML(p){
   </div>`;
 }
 
-// Cluster consecutive stopped points within 50m. A cluster spanning ≥30 min
+// Cluster consecutive stopped points within 50m. A cluster spanning ≥20 min
 // becomes a "stop" — rendered as a 🅿️ marker instead of individual dots.
 function detectStops(positions){
   const STOP_RADIUS_M = 50;
-  const MIN_DURATION_MIN = 30;
+  const MIN_DURATION_MIN = 20;
   const isStopped = p => (+p.speed || 0) === 0;
   const stops = [];
   let cluster = null;
@@ -1799,7 +1799,7 @@ async function loadHistory(hours){
   _histPoints = valid;
   _routedSegments = new Array(valid.length - 1).fill(null);
   _resetPlayUI(valid.length >= 2);
-  // Detect stops: clusters of stopped points within 50m spanning ≥30 min.
+  // Detect stops: clusters of stopped points within 50m spanning ≥20 min.
   // Interior points of a stop are hidden — replaced by one 🅿️ marker. Start/end of the trip stay visible.
   const stops = detectStops(valid);
   const stopIdx = new Set();
