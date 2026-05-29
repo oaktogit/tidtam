@@ -141,6 +141,9 @@ class SkytekScraper(BaseScraper):
                 "status": status,
                 "address": address,
                 "heading": heading,
+                # odometer requires a fresh inspect of GetLocationData JSON to
+                # confirm the field name (Step 2.4b); leave NULL for now.
+                "engine_on": acc_on if pos else None,
             })
 
         return vehicles
