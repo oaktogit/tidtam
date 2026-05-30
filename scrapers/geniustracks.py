@@ -1,5 +1,6 @@
 from playwright.async_api import Page
 from scrapers.base import BaseScraper
+from scrapers.geocode import reverse_geocode
 
 
 class GeniusTracksScraper(BaseScraper):
@@ -96,15 +97,19 @@ class GeniusTracksScraper(BaseScraper):
             except (TypeError, ValueError):
                 odometer = None
 
+            lat = float(d.get("lat", 0))
+            lng = float(d.get("lng", 0))
+            address = await reverse_geocode(lat, lng) if lat and lng else ""
+
             vehicles.append({
                 "vehicle_id": str(d.get("id")),
                 "name": d.get("name", ""),
                 "plate": d.get("number", ""),
-                "lat": float(d.get("lat", 0)),
-                "lng": float(d.get("lng", 0)),
+                "lat": lat,
+                "lng": lng,
                 "speed": speed,
                 "status": status,
-                "address": d.get("address", ""),
+                "address": address,
                 "heading": heading,
                 "odometer": odometer,
                 "engine_on": bool(engine_on),

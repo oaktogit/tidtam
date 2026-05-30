@@ -3,6 +3,7 @@ import json as json_lib
 import urllib.request
 from playwright.async_api import Page
 from scrapers.base import BaseScraper
+from scrapers.geocode import reverse_geocode
 from urllib.parse import urlparse
 
 
@@ -63,15 +64,19 @@ class LegacyScraper(BaseScraper):
             else:
                 status = "stopped"
 
+            lat = float(d.get("latitude", 0))
+            lng = float(d.get("longitude", 0))
+            address = await reverse_geocode(lat, lng) if lat and lng else ""
+
             vehicles.append({
                 "vehicle_id": str(d.get("id")),
                 "name": name,
                 "plate": plate,
-                "lat": float(d.get("latitude", 0)),
-                "lng": float(d.get("longitude", 0)),
+                "lat": lat,
+                "lng": lng,
                 "speed": speed,
                 "status": status,
-                "address": d.get("address", ""),
+                "address": address,
                 "heading": heading,
                 "odometer": odometer,
                 "engine_on": ignition,
