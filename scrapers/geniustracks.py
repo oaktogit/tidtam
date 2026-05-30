@@ -12,8 +12,11 @@ class GeniusTracksScraper(BaseScraper):
 
         await page.fill('input[name="username"], input[type="email"]', self.username)
         await page.fill('input[name="password"], input[type="password"]', self.password)
-        await page.click('button[type="submit"], input[type="submit"]')
-        await page.wait_for_function("() => !window.location.href.includes('login')", timeout=60000)
+        # expect_navigation around the click avoids the race where the URL
+        # check runs before the JS-driven navigation kicks in. See
+        # `feedback-click-nav-race` memory.
+        async with page.expect_navigation(wait_until="load", timeout=30000):
+            await page.click('button[type="submit"], input[type="submit"]')
 
         return "login" not in page.url.lower()
 
