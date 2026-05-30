@@ -1008,6 +1008,23 @@ async function upgradeToRoadDistances(){
   }
 }
 
+function fmtAddr(addr, opts={}){
+  const {inline=false, prefix=''} = opts;
+  if(!addr) return '';
+  const parts = addr.split('\n');
+  const poi = parts[0];
+  const admin = parts.slice(1).join(' ').trim();
+  if(inline){
+    return admin
+      ? `${prefix}<b>${poi}</b><br><span style="color:#64748B;font-size:11px;padding-left:14px">${admin}</span>`
+      : `${prefix}${poi}`;
+  }
+  return admin
+    ? `<div style="font-size:12px;color:#334155;font-weight:500;margin:3px 0 1px">${poi}</div>
+       <div style="font-size:11px;color:#64748B;margin-bottom:3px">${admin}</div>`
+    : `<div style="font-size:11px;color:#64748B;margin:3px 0">${poi}</div>`;
+}
+
 function popupHTML(v){
   const navUrl = gmapsNav(v.lat, v.lng);
   const km = v._km;
@@ -1021,7 +1038,7 @@ function popupHTML(v){
   const plateEsc = (v.plate || v.vehicle_id || '').replace(/'/g, "\\'");
   return `<div style="min-width:170px">
     <b style="font-family:'Share Tech Mono',monospace">${v.plate||v.vehicle_id}</b>
-    <div style="font-size:11px;color:#64748B;margin:3px 0">${v.address||''}</div>
+    ${fmtAddr(v.address)}
     <div style="font-size:12px">ความเร็ว: <b>${v.speed||0}</b> km/h</div>
     ${distHTML}
     ${alertsHTML}
@@ -1673,7 +1690,7 @@ function stopMarkerHTML(stop){
   const fmtDur = m => m < 60 ? `${Math.round(m)} นาที` : `${(m/60).toFixed(1)} ชม.`;
   return `<div style="font-size:12px;line-height:1.5;max-width:240px">
     <b>🅿️ จุดจอด</b>
-    ${stop.address ? `<br>📍 ${stop.address}` : ''}
+    ${stop.address ? `<br>${fmtAddr(stop.address, {inline:true, prefix:'📍 '})}` : ''}
     <br>⏱️ จอด <b>${fmtDur(stop.duration)}</b>
     <br>🕐 ${fmtTime(stop.start)} → ${fmtTime(stop.end)}
     <br><span style="color:#64748B;font-size:11px">${stop.points.length} จุด ภายใน 50 ม.</span>
