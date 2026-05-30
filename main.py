@@ -22,10 +22,13 @@ _scrape_lock = asyncio.Lock()
 
 
 async def scrape_all():
-    # Lock prevents the dashboard's manual /api/scrape from racing the
-    # AsyncIOScheduler job (or itself, if the user spams the refresh button).
+    # If another scrape (scheduler or manual) is already running, ride along
+    # by waiting for it to finish — caller still gets fresh data without
+    # double-scraping. If we grab the lock first, do the actual work.
     if _scrape_lock.locked():
-        print("[scrape] already running — skipping concurrent request")
+        print("[scrape] another scrape in progress — waiting for it to finish")
+        async with _scrape_lock:
+            pass
         return
     async with _scrape_lock:
         print("=== เริ่มดึงข้อมูล GPS ===")
