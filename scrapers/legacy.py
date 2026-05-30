@@ -1,10 +1,31 @@
 import asyncio
 import json as json_lib
+import re
 import urllib.request
 from playwright.async_api import Page
 from scrapers.base import BaseScraper
 from scrapers.geocode import reverse_geocode
 from urllib.parse import urlparse
+
+
+_LEGACY_DIST_PREFIX = re.compile(r"^\s*\(\s*[\d.]+\s*m\s*\)\s*")
+_LEGACY_ADMIN_START = re.compile(r"\s*(?:ต\.|แขวง\s|ตำบล\s)")
+_TRAILING_POSTAL = re.compile(r"\s*\d{5}\s*$")
+
+
+def _split_legacy_address(s: str) -> tuple[str, str]:
+    """Parse legacy provider's '( 233.49 m) ครัวร้อยเอ็ด  ต.บางนอน อ.เมืองระนอง  จ.ระนอง 85000'
+    into (poi, admin). Either side may be empty if not present."""
+    s = (s or "").strip()
+    if not s:
+        return "", ""
+    rest = _LEGACY_DIST_PREFIX.sub("", s)
+    m = _LEGACY_ADMIN_START.search(rest)
+    if not m:
+        return "", _TRAILING_POSTAL.sub("", rest).strip()
+    poi = rest[: m.start()].strip()
+    admin = _TRAILING_POSTAL.sub("", rest[m.start():]).strip()
+    return poi, admin
 
 
 class LegacyScraper(BaseScraper):
@@ -66,7 +87,13 @@ class LegacyScraper(BaseScraper):
 
             lat = float(d.get("latitude", 0))
             lng = float(d.get("longitude", 0))
-            address = await reverse_geocode(lat, lng) if lat and lng else ""
+            poi, admin = _split_legacy_address(d.get("address", ""))
+            if poi and admin:
+                address = f"{poi}\n{admin}"
+            elif poi or admin:
+                address = poi or admin
+            else:
+                address = await reverse_geocode(lat, lng) if lat and lng else ""
 
             vehicles.append({
                 "vehicle_id": str(d.get("id")),

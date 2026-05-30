@@ -99,7 +99,19 @@ class GeniusTracksScraper(BaseScraper):
 
             lat = float(d.get("lat", 0))
             lng = float(d.get("lng", 0))
-            address = await reverse_geocode(lat, lng) if lat and lng else ""
+            poi_obj = d.get("nearest_poi")
+            poi_name = (
+                (poi_obj.get("name") if isinstance(poi_obj, dict) else None)
+                or d.get("near")
+                or ""
+            ).strip()
+            admin = (d.get("address") or "").strip()
+            if poi_name and admin:
+                address = f"{poi_name}\n{admin}"
+            elif poi_name or admin:
+                address = poi_name or admin
+            else:
+                address = await reverse_geocode(lat, lng) if lat and lng else ""
 
             vehicles.append({
                 "vehicle_id": str(d.get("id")),
