@@ -168,10 +168,14 @@ async def reverse_geocode(lat: float, lng: float) -> str:
 def warm_cache_from(rows) -> int:
     """Pre-populate _cache from an iterable of (lat, lng, address) tuples.
     Saves serial Nominatim calls (rate-limited 1 req/s) for vehicles whose
-    rounded position hasn't moved since the previous scrape."""
+    rounded position hasn't moved since the previous scrape.
+
+    Only warms entries already in 2-line "POI\\nadmin" format — pre-POI
+    addresses are skipped so the next scrape re-fetches them through the
+    new Overpass path."""
     n = 0
     for lat, lng, addr in rows:
-        if lat and lng and addr:
+        if lat and lng and addr and "\n" in addr:
             _cache[(round(lat, 4), round(lng, 4))] = addr
             n += 1
     return n
