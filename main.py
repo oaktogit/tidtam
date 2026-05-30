@@ -18,17 +18,26 @@ def build_scrapers():
     ]
 
 
+_scrape_lock = asyncio.Lock()
+
+
 async def scrape_all():
-    print("=== เริ่มดึงข้อมูล GPS ===")
-    scrapers = build_scrapers()
-    await asyncio.gather(*[s.run() for s in scrapers])
-    try:
-        deleted = cleanup_old_positions(days=90)
-        if deleted:
-            print(f"[positions] retention: deleted {deleted} rows older than 90 days")
-    except Exception as e:
-        print(f"[positions] retention cleanup failed: {e}")
-    print("=== ดึงข้อมูลเสร็จ ===")
+    # Lock prevents the dashboard's manual /api/scrape from racing the
+    # AsyncIOScheduler job (or itself, if the user spams the refresh button).
+    if _scrape_lock.locked():
+        print("[scrape] already running — skipping concurrent request")
+        return
+    async with _scrape_lock:
+        print("=== เริ่มดึงข้อมูล GPS ===")
+        scrapers = build_scrapers()
+        await asyncio.gather(*[s.run() for s in scrapers])
+        try:
+            deleted = cleanup_old_positions(days=90)
+            if deleted:
+                print(f"[positions] retention: deleted {deleted} rows older than 90 days")
+        except Exception as e:
+            print(f"[positions] retention cleanup failed: {e}")
+        print("=== ดึงข้อมูลเสร็จ ===")
 
 
 async def main():

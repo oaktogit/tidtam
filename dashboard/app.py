@@ -43,3 +43,13 @@ async def positions(source: str, vehicle_id: str, hours: int = 24):
     """Position history for one vehicle, oldest first. Capped at 30 days."""
     hours = max(1, min(hours, 24 * 30))
     return get_positions(source, vehicle_id, hours=hours)
+
+
+@app.post("/api/scrape")
+async def trigger_scrape():
+    """Manual scrape trigger for the local dashboard's refresh button.
+    Blocks until the scrape finishes; main.scrape_all has its own lock so
+    spamming this won't queue concurrent runs."""
+    from main import scrape_all  # lazy: avoid circular import at module load
+    await scrape_all()
+    return {"status": "ok"}

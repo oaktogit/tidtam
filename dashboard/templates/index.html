@@ -1354,6 +1354,11 @@ async function refreshLocal(){
   btn.disabled = true;
   btn.classList.add('busy');
   logo.classList.add('driving');
+  try {
+    await fetch('/api/scrape', { method: 'POST' });
+  } catch (e) {
+    console.warn('[refresh] scrape trigger failed:', e);
+  }
   await loadData();
   btn.disabled = false;
   btn.classList.remove('busy');
